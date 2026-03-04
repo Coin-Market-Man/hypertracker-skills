@@ -38,3 +38,10 @@ Each file contains the same complete reference:
 
 - [Get your API key](https://app.coinmarketman.com/hypertracker/api-dashboard)
 - [API Docs](https://docs.coinmarketman.com)
+
+
+
+---
+
+— The HyperTracker Team  
+A Coin Market Manager product
