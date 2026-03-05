@@ -53,29 +53,29 @@ Not all data goes back the same distance. Check this before building anything hi
 
 Every wallet on Hyperliquid is classified into 16 behavioral segments across two dimensions.
 
-### PnL-Based Cohorts
-| ID | Name | Description |
-|----|------|-------------|
-| 8 | Money Printer | Consistently profitable |
-| 9 | Smart Money | High PnL, sophisticated positioning |
-| 10 | Steady Eddie | Moderate, consistent returns |
-| 11 | Bag Holder | Holding losers, not cutting losses |
-| 12 | Fresh Meat | New traders, limited history |
-| 13 | Degen Gambler | High risk, volatile returns |
-| 14 | Exit Liquidity | Consistently wrong side |
-| 15 | Giga-Rekt | Severe losses, worst performers |
-
 ### Size-Based Cohorts
-| ID | Name |
-|----|------|
-| 16 | Shrimp (smallest) |
-| 15 | Crab |
-| 14 | Fish |
-| 13 | Dolphin |
-| 12 | Shark |
-| 11 | Whale |
-| 10 | Megalodon |
-| 7 | Leviathan (largest) |
+| ID | Name | Position Size |
+|----|------|---------------|
+| 16 | Shrimp | $0 - $250 |
+| 1 | Fish | $250 - $10K |
+| 2 | Dolphin | $10K - $50K |
+| 3 | Apex Predator | $50K - $100K |
+| 4 | Small Whale | $100K - $500K |
+| 5 | Whale | $500K - $1M |
+| 6 | Tidal Whale | $1M - $5M |
+| 7 | Leviathan | $5M+ |
+
+### PnL-Based Cohorts
+| ID | Name | All-Time PnL |
+|----|------|--------------|
+| 8 | Money Printer | $1M+ |
+| 9 | Smart Money | $100K - $1M |
+| 10 | Consistent Grinder | $10K - $100K |
+| 11 | Humble Earner | $0 - $10K |
+| 12 | Exit Liquidity | -$10K - $0 |
+| 13 | Semi-Rekt | -$100K - -$10K |
+| 14 | Full Rekt | -$1M - -$100K |
+| 15 | Giga-Rekt | Below -$1M |
 
 PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segment/{id}`. Call `GET /segments` to confirm latest ID mapping.
 
@@ -101,7 +101,7 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 **GET /position-metrics/coin/{coin}** — Per-coin long/short breakdown, OI, trader counts. Params: `start`, `end`.
 
-**GET /position-metrics/coin/{coin}/segment/{segmentId}** — Per-coin, per-PnL-cohort metrics. Compare Smart Money (9) vs Exit Liquidity (14). Params: `start`, `end`.
+**GET /position-metrics/coin/{coin}/segment/{segmentId}** — Per-coin, per-PnL-cohort metrics. Compare Smart Money (9) vs Exit Liquidity (12). Params: `start`, `end`.
 
 **GET /position-metrics/coin/{coin}/position-size-segment/{id}** — Per-coin, per-size-tier metrics. Params: `start`, `end`.
 
@@ -161,7 +161,7 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 ```json
 [
   {"segmentId": 9, "segmentName": "Smart Money", "bias": 0.42, "timestamp": "2026-03-01T12:00:00Z"},
-  {"segmentId": 14, "segmentName": "Exit Liquidity", "bias": -0.31, "timestamp": "2026-03-01T12:00:00Z"}
+  {"segmentId": 12, "segmentName": "Exit Liquidity", "bias": -0.31, "timestamp": "2026-03-01T12:00:00Z"}
 ]
 ```
 Positive bias = net long, negative = net short.
@@ -320,8 +320,8 @@ Endpoints: `/segments/bias`
 Track bias time series, define extremes (> 0.7 or < -0.7), fire alert when pullback starts.
 
 **"Contrarian signal: go opposite of Exit Liquidity and Giga-Rekt"**
-Endpoints: `/segments/bias`, `/position-metrics/coin/{coin}/segment/14`, `/position-metrics/coin/{coin}/segment/15`
-When Exit Liquidity (14) and Giga-Rekt (15) are heavily positioned one way, flag the opposite direction as a potential trade.
+Endpoints: `/segments/bias`, `/position-metrics/coin/{coin}/segment/12`, `/position-metrics/coin/{coin}/segment/15`
+When Exit Liquidity (12) and Giga-Rekt (15) are heavily positioned one way, flag the opposite direction as a potential trade.
 
 ### Order Flow
 
