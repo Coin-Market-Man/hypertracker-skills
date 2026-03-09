@@ -26,7 +26,7 @@ All paths below are relative to this base URL. Full OpenAPI spec: `GET /api/exte
 4. **Order snapshots floor date:** `2026-01-19T11:05:00Z`. Timestamps must align to 5-minute boundaries.
 5. **Leaderboard `rankBy`:** `pnlAllTime`, `pnlMonth`, `pnlWeek`, `pnlDay`. **`limit`:** `25`, `50`, `100`.
 6. **Default result count is 500** unless `limit` is specified. Paginate with `cursor` from the response.
-7. **Data refreshes every ~5 minutes.** Plan polling accordingly.
+7. **Data refreshes every ~5 minutes** for most endpoints. State/summary updates may take up to 15-17 minutes. Plan polling accordingly.
 8. **REST only.** WebSocket and Webhook delivery are available on higher tiers as a custom package (not part of the standard API).
 
 ---
@@ -45,7 +45,7 @@ Not all data goes back the same distance. Check this before building anything hi
 | Cohort bias | **12 hours only** | Rolling window |
 | Heatmap / Leaderboards | **Current only** | No history |
 
-**Important:** Cohort bias (`/segments/bias`) returns ~6 data points over a 12-hour rolling window. It is not suitable for multi-day backtesting. Use `/position-metrics/coin/{coin}/segment/{segmentId}` for historical cohort analysis (up to ~4 weeks).
+**Important:** Cohort bias (`/segments/bias`) returns data over a rolling window. It is not suitable for multi-day backtesting. Use `/position-metrics/coin/{coin}/segment/{segmentId}` for historical cohort analysis (up to ~4 weeks).
 
 ---
 
@@ -77,7 +77,7 @@ Every wallet on Hyperliquid is classified into 16 behavioral segments across two
 | 14 | Full Rekt | -$1M - -$100K |
 | 15 | Giga-Rekt | Below -$1M |
 
-PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segment/{id}`. Call `GET /segments` to confirm latest ID mapping.
+PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segment/{sizeSegmentId}`. Call `GET /segments` to confirm latest ID mapping.
 
 ---
 
@@ -87,15 +87,13 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 **GET /segments** — All 16 cohort definitions with IDs and names. Call first to confirm segment IDs.
 
-**GET /segments/bias** — Directional bias for every cohort. Negative = net short, positive = net long. ~6 data points over a 12-hour rolling window.
+**GET /segments/bias** — Directional bias for every cohort. Returns all 16 segments with ~6 bias data points each over a 12-hour rolling window. Negative = net short, positive = net long.
 
-**GET /segments/summary** — High-level summary: trader counts, aggregate positioning, segment distribution.
+**GET /segments/{segmentId}/summary** — Per-segment summary: trader counts, aggregate positioning. Params: `segmentId` (path), `positionAge`.
 
 ### Positions & Market Exposure
 
 **GET /positions** — Individual open positions. Params: `start` (required), `end`, `coin`, `limit`, `cursor`. Historical from April 2025.
-
-**GET /positions/ranked** — Positions ranked by criteria. Params: `rankBy`, `segmentIds`, `coin`, `limit`.
 
 **GET /position-metrics/general** — Exchange-level OI, position counts, aggregate metrics. Params: `start`, `end`.
 
@@ -103,55 +101,55 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 **GET /position-metrics/coin/{coin}/segment/{segmentId}** — Per-coin, per-PnL-cohort metrics. Compare Smart Money (9) vs Exit Liquidity (12). Params: `start`, `end`.
 
-**GET /position-metrics/coin/{coin}/position-size-segment/{id}** — Per-coin, per-size-tier metrics. Params: `start`, `end`.
+**GET /position-metrics/coin/{coin}/position-size-segment/{sizeSegmentId}** — Per-coin, per-size-tier metrics. Params: `sizeSegmentId` (path), `start`, `end`.
 
 ### Order Flow
 
-**GET /orders/5m-snapshots/latest** — Most recent snapshot of every open order. Params: `coin`. Returns: price, size, side, orderType (stop, tp, limit_increase, limit_reduction).
+**GET /orders/5m-snapshots/latest** — Most recent snapshot of every open order. Params: `coin`, `limit`, `nextCursor`, `address`, `oid`, `orderType`. orderType enum: `Limit`, `Stop Limit`, `Stop Market`, `Take Profit Limit`, `Take Profit Market`.
 
-**GET /orders/5m-snapshots** — Historical snapshots. Params: `coin`, `timestamp` (must be 5-min boundary, after floor date).
+**GET /orders/5m-snapshots/{snapshotTime}** — Historical snapshot at a specific time. Params: `snapshotTime` (path, must be 5-min boundary, after floor date), `coin`, `limit`, `nextCursor`, `address`, `orderType`.
+
+**GET /orders/5m-snapshots/latest-snapshot-timestamp** — Returns the most recent available snapshot timestamp.
+
+**GET /orders/5m-snapshots/coins/{coin}/download** — Download all order snapshots for a coin as a file.
 
 ### Liquidation Risk
 
-**GET /liquidation-risk** — Per-asset risk scoring based on proximity to liquidation thresholds. Returns risk scores, at-risk OI, directional skew.
+**GET /{segmentId}/assets/liquidation-risk** — Per-asset liquidation risk for a specific cohort. Params: `segmentId` (path), `offset`, `limit`. Returns risk scores, at-risk OI, directional skew.
 
-**GET /heatmap** — Liquidation clusters across price levels. Current snapshot only, no history.
+**GET /positions/heatmap** — Liquidation clusters across price levels. Params: `openedWithin` (enum: `24h`, `7d`, `30d`, `all`; default: `all`). Current snapshot only, no history.
 
 ### Leaderboards
 
-**GET /leaderboards/perp-pnl** — Top traders by PnL. Params: `rankBy`, `limit`, `page`.
+**GET /leaderboards/perp-pnl** — Top traders by PnL. Params: `rankBy`, `limit`, `offset`, `order`, `orderBy`.
 
-**GET /leaderboards/perp-volume** — Top traders by volume. Params: `rankBy`, `limit`, `page`.
+**GET /leaderboards/perp-pnl/{period}/download** — Download leaderboard data for a given period.
 
 ### Fills
 
-**GET /fills** — Trade executions. Params: `start` (required), `end` (required, same day), `coin`, `limit`, `cursor`. 24hr max window. Historical from July 2025.
+**GET /fills** — Trade executions. Params: `start` (required), `end` (same day), `coin` (array, e.g. `coin[]=BTC`), `limit`, `nextCursor`, `address`, `builder`, `side`. 24hr max window. Historical from July 2025.
 
 ### Volume Metrics
 
-**GET /perp-volume-metrics** — Aggregate volume metrics. Params: `start`, `end`, `cursor`.
+**GET /metrics/perp-volume** — Aggregate volume metrics. Params: `start`, `end`, `limit`, `nextCursor`.
 
 ### Wallets
 
-**GET /wallets/all** — All tracked wallets with profile data and activity.
-
-**GET /wallets/{address}** — Profile for a specific wallet.
-
-**GET /wallets/{address}/positions** — Open positions for a specific wallet.
+**GET /wallets** — Tracked wallets. Params: `offset`, `limit`, `order`, `orderBy`, `segmentIds`, `hasOpenPositions`.
 
 ### $HYPE Token
 
-**GET /hype/holders** — Top 100 HYPE holders with balances, staking, 24h/7d comparisons.
+**GET /hype/holders** — HYPE token holders with balances, staking, and comparisons. Params: `offset`, `limit` (max 500), `order`, `orderBy`, `rankBy`, `rankOrder`.
 
 ### Global State
 
-**GET /state/summary** — Exchange snapshot: total/active traders, aggregate OI, segment distribution. Params: `includeDetails`, `includeHistory`.
+**GET /state/summary** — Exchange snapshot: total/active traders, aggregate OI, segment distribution. No parameters. **Note:** This endpoint may not yet be available on all environments.
 
 ### Builders
 
-**GET /builders** — All builder code holders with user counts and volume.
+**GET /builders/{builder}/fills** — Trade fills attributed to a builder code. Params: `builder` (path), `start` (required), `end`, `coin`, `limit`, `nextCursor`, `address`, `fillType`, `side`.
 
-**GET /builders/{builder}/users** — Users attributed to a builder code.
+**GET /builders/{builder}/users** — Users attributed to a builder code. Params: `builder` (path), `offset`, `limit`, `order`, `orderBy`, `period`.
 
 ---
 
@@ -160,24 +158,35 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 ### /segments/bias
 ```json
 [
-  {"segmentId": 9, "segmentName": "Smart Money", "bias": 0.42, "timestamp": "2026-03-01T12:00:00Z"},
-  {"segmentId": 12, "segmentName": "Exit Liquidity", "bias": -0.31, "timestamp": "2026-03-01T12:00:00Z"}
+  {
+    "segment": {"id": 9, "name": "Smart Money", "category": "pnl", "criteria": {"minPnl": 100000, "maxPnl": 1000000}},
+    "bias": [
+      {"timestamp": "2026-03-01T00:10:00.018Z", "bias": 0.42},
+      {"timestamp": "2026-03-01T02:10:00.132Z", "bias": 0.38}
+    ]
+  }
 ]
 ```
-Positive bias = net long, negative = net short.
+Returns all 16 segments. Each has a `bias` array with ~6 data points over a 12-hour rolling window. Positive = net long, negative = net short.
 
-### /liquidation-risk
+### /{segmentId}/assets/liquidation-risk
 ```json
-[
-  {"coin": "BTC", "riskScore": 0.72, "atRiskOI": 1450000, "longRisk": 0.65, "shortRisk": 0.79}
-]
+{
+  "totalCount": 297,
+  "items": [
+    {"coin": "BTC", "totalValue": 287062584.45, "riskValue": 50791.19, "percentRisk": 49.06}
+  ]
+}
 ```
 
 ### /orders/5m-snapshots/latest
 ```json
-[
-  {"coin": "BTC", "price": 89500.0, "size": 2.5, "side": "B", "orderType": "stop"}
-]
+{
+  "orders": [
+    {"coin": "BTC", "side": "B", "limitPx": 85000, "sz": 0.5, "orderType": "Limit", "address": "0x...", "oid": 756322353, "snapshotTs": "2026-03-01T10:35:00.000Z"}
+  ],
+  "nextCursor": "eyJ..."
+}
 ```
 
 ### Paginated response (positions, fills, etc.)
@@ -199,6 +208,8 @@ Pass `cursor` value as a query parameter on next request to get the next page. W
 | Pulse | $179/mo | 50,000/mo | 12/min |
 | Flow | $1,159/mo | 200,000/mo | 25/min |
 | Stream | $2,399/mo | 1,000,000/mo | 100/min |
+
+**Note:** Some endpoints may support up to 200 requests/min. The rate limit counter on the API dashboard may not reflect per-endpoint limits.
 
 ---
 
@@ -260,7 +271,7 @@ for day_offset in range(5):
     params = {
         "start": start.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         "end": end.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-        "coin": "BTC"
+        "coin[]": "BTC"
     }
     response = requests.get(url + "/fills", headers=headers, params=params)
 ```
@@ -282,19 +293,19 @@ Endpoints: `/segments/bias`, `/segments`
 Fetch bias data, display each cohort with a simple long/short indicator. Color-code green for long, red for short. One-page HTML.
 
 **"Show me which coins are about to get liquidated"**
-Endpoints: `/liquidation-risk`
+Endpoints: `/{segmentId}/assets/liquidation-risk`
 Fetch risk data, sort by score, display as a simple ranked list with risk level colors.
 
 **"What should I be watching today? Rank coins by where the most interesting activity is happening."**
-Endpoints: `/segments/bias`, `/position-metrics/coin/{coin}/segment/9`, `/orders/5m-snapshots/latest`, `/liquidation-risk`
+Endpoints: `/segments/bias`, `/position-metrics/coin/{coin}/segment/9`, `/orders/5m-snapshots/latest`, `/{segmentId}/assets/liquidation-risk`
 Score each coin by: smart money conviction, order flow clustering, liquidation proximity. Rank and surface top 5 with a one-line reason for each.
 
 **"Am I about to get liquidated? Check if my position is safe."**
-Endpoints: `/liquidation-risk`, `/heatmap`
+Endpoints: `/{segmentId}/assets/liquidation-risk`, `/positions/heatmap`
 User provides coin and direction. Fetch liquidation risk for that coin, show how close current price is to liquidation clusters, and give a plain-English safety rating.
 
 **"Show me a fear/greed gauge for Hyperliquid right now"**
-Endpoints: `/segments/bias`, `/liquidation-risk`, `/state/summary`
+Endpoints: `/segments/bias`, `/{segmentId}/assets/liquidation-risk`, `/state/summary`
 Composite score from cohort sentiment, liquidation proximity, and OI trends. Display as a simple gauge with color-coded zones. One-page HTML.
 
 **"Show me what whales are doing vs retail on BTC"**
@@ -304,10 +315,10 @@ Compare Leviathan (7) and Smart Money (9) positioning against Shrimp (16). Show 
 ### Dashboards
 
 **"Build a Hyperliquid market dashboard with cohort positioning, order flow, and liquidation risk"**
-Endpoints: `/segments/bias`, `/orders/5m-snapshots/latest`, `/liquidation-risk`, `/position-metrics/coin/{coin}`
+Endpoints: `/segments/bias`, `/orders/5m-snapshots/latest`, `/{segmentId}/assets/liquidation-risk`, `/position-metrics/coin/{coin}`
 
 **"Track my positions and compare them against smart money"**
-Endpoints: `/wallets/{address}/positions`, `/position-metrics/coin/{coin}/segment/9`, `/segments/bias`
+Endpoints: `/wallets`, `/position-metrics/coin/{coin}/segment/9`, `/segments/bias`
 
 ### Trading Signals
 
@@ -332,14 +343,14 @@ Group orders into price buckets, count by type, visualize as a bar chart relativ
 ### Liquidation
 
 **"Liquidation risk monitor across all coins, ranked and auto-refreshing"**
-Endpoints: `/liquidation-risk`, `/position-metrics/coin/{coin}`
+Endpoints: `/{segmentId}/assets/liquidation-risk`, `/position-metrics/coin/{coin}`
 Rank by risk score, pull OI for top 5 riskiest, color-code severity, refresh every 5 minutes.
 
 ### Leaderboard
 
 **"Watchlist from today's top 25 traders. Alert me when they open new positions."**
-Endpoints: `/leaderboards/perp-pnl?rankBy=pnlDay&limit=25`, `/wallets/{address}/positions`
-Fetch leaderboard, baseline positions, poll for changes every 5 minutes.
+Endpoints: `/leaderboards/perp-pnl?rankBy=pnlDay&limit=25`, `/wallets`
+Fetch leaderboard, look up wallets, poll for changes every 5 minutes.
 
 ### Backtesting
 
@@ -354,17 +365,17 @@ For each cohort, pull 4 weeks of positioning data. Correlate exposure changes wi
 ### Market Regime
 
 **"Is the market in risk-on or risk-off mode right now based on cohort behavior?"**
-Endpoints: `/segments/bias`, `/state/summary`, `/liquidation-risk`
+Endpoints: `/segments/bias`, `/state/summary`, `/{segmentId}/assets/liquidation-risk`
 Risk-on signals: Smart Money and Money Printer net long, low liquidation risk, rising OI. Risk-off: defensive cohorts reducing exposure, high liq risk, falling OI. Classify current regime and show supporting data.
 
 **"Daily market regime report: combine cohort bias, OI, and liquidation risk into one summary"**
-Endpoints: `/segments/bias`, `/position-metrics/general`, `/liquidation-risk`, `/state/summary`
+Endpoints: `/segments/bias`, `/position-metrics/general`, `/{segmentId}/assets/liquidation-risk`, `/state/summary`
 Pull all four data sources. Classify as risk-on, risk-off, or neutral. Show the 3 strongest supporting signals and 1 contradicting signal. Output as a clean summary.
 
 ### Multi-Endpoint
 
 **"Coin screener ranking assets by smart money conviction, order flow health, and liquidation risk"**
-Endpoints: `/position-metrics/coin/{coin}/segment/9`, `/orders/5m-snapshots/latest`, `/liquidation-risk`, `/state/summary`
+Endpoints: `/position-metrics/coin/{coin}/segment/9`, `/orders/5m-snapshots/latest`, `/{segmentId}/assets/liquidation-risk`, `/state/summary`
 
 ---
 
@@ -377,8 +388,8 @@ Endpoints: `/position-metrics/coin/{coin}/segment/9`, `/orders/5m-snapshots/late
 | Empty order snapshots | Timestamp must be after `2026-01-19T11:05:00Z` and on a 5-minute boundary |
 | Dates not working | Use ISO 8601: `2026-02-25T00:00:00.000Z`. Not epoch milliseconds. |
 | Leaderboard error | `rankBy` must be `pnlAllTime`/`pnlMonth`/`pnlWeek`/`pnlDay`. `limit` must be 25/50/100. |
-| Empty cohort history | `/segments/bias` only has 12 hours. Use `/position-metrics/coin/{coin}/segment/{id}` for longer lookbacks (up to ~4 weeks). |
-| Stale data | Refreshes every ~5 minutes. Wait for next cycle. |
+| Empty cohort history | `/segments/bias` has limited history. Use `/position-metrics/coin/{coin}/segment/{id}` for longer lookbacks (up to ~4 weeks). |
+| Stale data | Most data refreshes every ~5 minutes. State/summary updates may take up to 15-17 minutes. Wait for next cycle. |
 | No more pages | `cursor` is `null` in the response. You've fetched everything. |
 
 ## Links
