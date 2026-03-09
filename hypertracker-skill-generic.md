@@ -8,7 +8,7 @@ Pre-computed intelligence layer for Hyperliquid, the largest on-chain perpetual 
 Authorization: Bearer <your_jwt_token>
 ```
 
-Get your token: https://app.coinmarketman.com/hypertracker/api-dashboard
+Get your token: https://app.coinmarketman.com/hypertracker/api-dashboard?utm_source=skill&utm_medium=ai&utm_campaign=skill-launch
 
 ## Base URL
 
@@ -394,6 +394,6 @@ Endpoints: `/position-metrics/coin/{coin}/segment/9`, `/orders/5m-snapshots/late
 
 ## Links
 
-- Dashboard & API Key: https://app.coinmarketman.com/hypertracker/api-dashboard
+- Dashboard & API Key: https://app.coinmarketman.com/hypertracker/api-dashboard?utm_source=skill&utm_medium=ai&utm_campaign=skill-launch
 - Docs: https://docs.coinmarketman.com
 - OpenAPI Spec: `GET /api/external-json`
