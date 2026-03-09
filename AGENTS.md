@@ -45,7 +45,7 @@ Not all data goes back the same distance. Check this before building anything hi
 | Cohort bias | **12 hours only** | Rolling window |
 | Heatmap / Leaderboards | **Current only** | No history |
 
-**Important:** Cohort bias (`/segments/bias`) returns data over a rolling window. It is not suitable for multi-day backtesting. Use `/position-metrics/coin/{coin}/segment/{segmentId}` for historical cohort analysis (up to ~4 weeks).
+**Important:** Cohort bias (`/segments/{segmentId}/bias-history`) returns data over a rolling window. It is not suitable for multi-day backtesting. Use `/position-metrics/coin/{coin}/segment/{segmentId}` for historical cohort analysis (up to ~4 weeks).
 
 ---
 
@@ -87,7 +87,7 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 **GET /segments** — All 16 cohort definitions with IDs and names. Call first to confirm segment IDs.
 
-**GET /segments/bias** — Directional bias for every cohort. Returns all 16 segments with ~6 bias data points each over a 12-hour rolling window. Negative = net short, positive = net long.
+**GET /segments/{segmentId}/bias-history** — Bias history for a specific cohort. Negative = net short, positive = net long. Params: `segmentId` (path), `limit`, `nextCursor`, `start`, `end`, `positionRecencyTimeframe` (enum: `24h`, `7d`, `30d`, `all`; default: `all`). To get all cohorts, call once per segment ID.
 
 **GET /segments/{segmentId}/summary** — Per-segment summary: trader counts, aggregate positioning. Params: `segmentId` (path), `positionAge`.
 
@@ -155,7 +155,7 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 ## Response Examples
 
-### /segments/bias
+### /segments/{segmentId}/bias-history
 ```json
 [
   {
@@ -221,7 +221,7 @@ import requests
 
 headers = {"Authorization": "Bearer YOUR_JWT_TOKEN"}
 response = requests.get(
-    "https://ht-api.coinmarketman.com/api/external/segments/bias",
+    "https://ht-api.coinmarketman.com/api/external/segments/9/bias-history",
     headers=headers
 )
 data = response.json()
@@ -230,7 +230,7 @@ data = response.json()
 ### JavaScript: Auth + Request
 ```javascript
 const response = await fetch(
-  "https://ht-api.coinmarketman.com/api/external/segments/bias",
+  "https://ht-api.coinmarketman.com/api/external/segments/9/bias-history",
   { headers: { "Authorization": "Bearer YOUR_JWT_TOKEN" } }
 );
 const data = await response.json();
@@ -289,7 +289,7 @@ def align_to_5min(dt):
 ### For Vibe Coders (no dev experience needed)
 
 **"I want to see what smart money is doing right now. Build me something simple."**
-Endpoints: `/segments/bias`, `/segments`
+Endpoints: `/segments/{segmentId}/bias-history`, `/segments`
 Fetch bias data, display each cohort with a simple long/short indicator. Color-code green for long, red for short. One-page HTML.
 
 **"Show me which coins are about to get liquidated"**
@@ -297,7 +297,7 @@ Endpoints: `/{segmentId}/assets/liquidation-risk`
 Fetch risk data, sort by score, display as a simple ranked list with risk level colors.
 
 **"What should I be watching today? Rank coins by where the most interesting activity is happening."**
-Endpoints: `/segments/bias`, `/position-metrics/coin/{coin}/segment/9`, `/orders/5m-snapshots/latest`, `/{segmentId}/assets/liquidation-risk`
+Endpoints: `/segments/{segmentId}/bias-history`, `/position-metrics/coin/{coin}/segment/9`, `/orders/5m-snapshots/latest`, `/{segmentId}/assets/liquidation-risk`
 Score each coin by: smart money conviction, order flow clustering, liquidation proximity. Rank and surface top 5 with a one-line reason for each.
 
 **"Am I about to get liquidated? Check if my position is safe."**
@@ -305,7 +305,7 @@ Endpoints: `/{segmentId}/assets/liquidation-risk`, `/positions/heatmap`
 User provides coin and direction. Fetch liquidation risk for that coin, show how close current price is to liquidation clusters, and give a plain-English safety rating.
 
 **"Show me a fear/greed gauge for Hyperliquid right now"**
-Endpoints: `/segments/bias`, `/{segmentId}/assets/liquidation-risk`, `/state/summary`
+Endpoints: `/segments/{segmentId}/bias-history`, `/{segmentId}/assets/liquidation-risk`, `/state/summary`
 Composite score from cohort sentiment, liquidation proximity, and OI trends. Display as a simple gauge with color-coded zones. One-page HTML.
 
 **"Show me what whales are doing vs retail on BTC"**
@@ -315,23 +315,23 @@ Compare Leviathan (7) and Smart Money (9) positioning against Shrimp (16). Show 
 ### Dashboards
 
 **"Build a Hyperliquid market dashboard with cohort positioning, order flow, and liquidation risk"**
-Endpoints: `/segments/bias`, `/orders/5m-snapshots/latest`, `/{segmentId}/assets/liquidation-risk`, `/position-metrics/coin/{coin}`
+Endpoints: `/segments/{segmentId}/bias-history`, `/orders/5m-snapshots/latest`, `/{segmentId}/assets/liquidation-risk`, `/position-metrics/coin/{coin}`
 
 **"Track my positions and compare them against smart money"**
-Endpoints: `/wallets`, `/position-metrics/coin/{coin}/segment/9`, `/segments/bias`
+Endpoints: `/wallets`, `/position-metrics/coin/{coin}/segment/9`, `/segments/{segmentId}/bias-history`
 
 ### Trading Signals
 
 **"Alert me when two cohorts diverge on any coin"**
-Endpoints: `/segments/bias`, `/position-metrics/coin/{coin}/segment/{segmentId}`
+Endpoints: `/segments/{segmentId}/bias-history`, `/position-metrics/coin/{coin}/segment/{segmentId}`
 Poll bias data, detect when cohorts split (e.g., Smart Money long, Exit Liquidity short). Pull coin-level metrics to find which coins drive the divergence.
 
 **"Mean-reversion alert when a cohort's bias hits an extreme and reverses"**
-Endpoints: `/segments/bias`
+Endpoints: `/segments/{segmentId}/bias-history`
 Track bias time series, define extremes (> 0.7 or < -0.7), fire alert when pullback starts.
 
 **"Contrarian signal: go opposite of Exit Liquidity and Giga-Rekt"**
-Endpoints: `/segments/bias`, `/position-metrics/coin/{coin}/segment/12`, `/position-metrics/coin/{coin}/segment/15`
+Endpoints: `/segments/{segmentId}/bias-history`, `/position-metrics/coin/{coin}/segment/12`, `/position-metrics/coin/{coin}/segment/15`
 When Exit Liquidity (12) and Giga-Rekt (15) are heavily positioned one way, flag the opposite direction as a potential trade.
 
 ### Order Flow
@@ -356,7 +356,7 @@ Fetch leaderboard, look up wallets, poll for changes every 5 minutes.
 
 **"Backtest: how did Smart Money positioning on BTC predict price moves over the last 4 weeks?"**
 Endpoints: `/position-metrics/coin/BTC/segment/9`
-Use per-coin cohort metrics (available ~4 weeks back). Correlate Smart Money net exposure changes with subsequent BTC price movement. Report hit rate and average return per signal. Note: cohort bias (`/segments/bias`) only has 12 hours of history and cannot be used for multi-day backtests.
+Use per-coin cohort metrics (available ~4 weeks back). Correlate Smart Money net exposure changes with subsequent BTC price movement. Report hit rate and average return per signal. Note: cohort bias (`/segments/{segmentId}/bias-history`) only has 12 hours of history and cannot be used for multi-day backtests.
 
 **"Compare all 8 PnL cohorts as predictors of BTC direction over the last month"**
 Endpoints: `/position-metrics/coin/BTC/segment/{segmentId}` (for each ID 8-15)
@@ -365,11 +365,11 @@ For each cohort, pull 4 weeks of positioning data. Correlate exposure changes wi
 ### Market Regime
 
 **"Is the market in risk-on or risk-off mode right now based on cohort behavior?"**
-Endpoints: `/segments/bias`, `/state/summary`, `/{segmentId}/assets/liquidation-risk`
+Endpoints: `/segments/{segmentId}/bias-history`, `/state/summary`, `/{segmentId}/assets/liquidation-risk`
 Risk-on signals: Smart Money and Money Printer net long, low liquidation risk, rising OI. Risk-off: defensive cohorts reducing exposure, high liq risk, falling OI. Classify current regime and show supporting data.
 
 **"Daily market regime report: combine cohort bias, OI, and liquidation risk into one summary"**
-Endpoints: `/segments/bias`, `/position-metrics/general`, `/{segmentId}/assets/liquidation-risk`, `/state/summary`
+Endpoints: `/segments/{segmentId}/bias-history`, `/position-metrics/general`, `/{segmentId}/assets/liquidation-risk`, `/state/summary`
 Pull all four data sources. Classify as risk-on, risk-off, or neutral. Show the 3 strongest supporting signals and 1 contradicting signal. Output as a clean summary.
 
 ### Multi-Endpoint
@@ -388,7 +388,7 @@ Endpoints: `/position-metrics/coin/{coin}/segment/9`, `/orders/5m-snapshots/late
 | Empty order snapshots | Timestamp must be after `2026-01-19T11:05:00Z` and on a 5-minute boundary |
 | Dates not working | Use ISO 8601: `2026-02-25T00:00:00.000Z`. Not epoch milliseconds. |
 | Leaderboard error | `rankBy` must be `pnlAllTime`/`pnlMonth`/`pnlWeek`/`pnlDay`. `limit` must be 25/50/100. |
-| Empty cohort history | `/segments/bias` has limited history. Use `/position-metrics/coin/{coin}/segment/{id}` for longer lookbacks (up to ~4 weeks). |
+| Empty cohort history | `/segments/{segmentId}/bias-history` has limited history. Use `/position-metrics/coin/{coin}/segment/{id}` for longer lookbacks (up to ~4 weeks). |
 | Stale data | Most data refreshes every ~5 minutes. State/summary updates may take up to 15-17 minutes. Wait for next cycle. |
 | No more pages | `cursor` is `null` in the response. You've fetched everything. |
 
