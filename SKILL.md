@@ -93,21 +93,21 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 ### Positions & Market Exposure
 
-**GET /positions** — Individual open positions. Params: `start` (required), `end`, `coin`, `limit`, `cursor`. Historical from April 2025.
+**GET /positions** — Individual open positions. Params: `start` (required), `end`, `coin`, `segmentId` (filter by cohort ID), `address` (array, use `address[]=0x...`), `open`, `limit`, `nextCursor`. Historical from April 2025. Also available as "Get All Positions by Cohort" on the Cohorts subpage.
 
-**GET /position-metrics/general** — Exchange-level OI, position counts, aggregate metrics. Params: `start`, `end`.
+**GET /position-metrics/general** — Exchange-level OI, position counts, aggregate metrics. Params: `start`, `end`, `limit`, `nextCursor`.
 
-**GET /position-metrics/coin/{coin}** — Per-coin long/short breakdown, OI, trader counts. Params: `start`, `end`.
+**GET /position-metrics/coin/{coin}** — Per-coin long/short breakdown, OI, trader counts. Params: `coin` (path), `start`, `end`, `limit`, `nextCursor`.
 
-**GET /position-metrics/coin/{coin}/segment/{segmentId}** — Per-coin, per-PnL-cohort metrics. Compare Smart Money (9) vs Exit Liquidity (12). Params: `start`, `end`.
+**GET /position-metrics/coin/{coin}/segment/{segmentId}** — Per-coin, per-PnL-cohort metrics. Compare Smart Money (9) vs Exit Liquidity (12). Params: `coin`, `segmentId` (path), `start`, `end`, `limit`, `nextCursor`.
 
-**GET /position-metrics/coin/{coin}/position-size-segment/{sizeSegmentId}** — Per-coin, per-size-tier metrics. Params: `sizeSegmentId` (path), `start`, `end`.
+**GET /position-metrics/coin/{coin}/position-size-segment/{sizeSegmentId}** — Per-coin, per-size-tier metrics. Params: `coin`, `sizeSegmentId` (path), `start`, `end`, `limit`, `nextCursor`.
 
 ### Order Flow
 
 **GET /orders/5m-snapshots/latest** — Most recent snapshot of every open order. Params: `coin`, `limit`, `nextCursor`, `address`, `oid`, `orderType`. orderType enum: `Limit`, `Stop Limit`, `Stop Market`, `Take Profit Limit`, `Take Profit Market`.
 
-**GET /orders/5m-snapshots/{snapshotTime}** — Historical snapshot at a specific time. Params: `snapshotTime` (path, must be 5-min boundary, after floor date), `coin`, `limit`, `nextCursor`, `address`, `orderType`.
+**GET /orders/5m-snapshots/{snapshotTime}** — Historical snapshot at a specific time. Params: `snapshotTime` (path, must be 5-min boundary, after floor date), `coin`, `limit`, `nextCursor`, `address`, `oid`, `start`, `end`, `orderType`.
 
 **GET /orders/5m-snapshots/latest-snapshot-timestamp** — Returns the most recent available snapshot timestamp.
 
@@ -123,7 +123,7 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 **GET /leaderboards/perp-pnl** — Top traders by PnL. Params: `rankBy`, `limit`, `offset`, `order`, `orderBy`.
 
-**GET /leaderboards/perp-pnl/{period}/download** — Download leaderboard data for a given period.
+**GET /leaderboards/perp-pnl/{period}/download** — Download leaderboard data for a given period. Params: `period` (path, enum: `all`, `30d`, `7d`, `24h`).
 
 ### Fills
 
@@ -135,7 +135,7 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 ### Wallets
 
-**GET /wallets** — Tracked wallets. Params: `offset`, `limit`, `order`, `orderBy`, `segmentIds`, `hasOpenPositions`.
+**GET /wallets** — Tracked wallets. Params: `offset`, `limit`, `order`, `orderBy`, `segmentIds`, `hasOpenPositions`, `address` (filter by individual wallet address).
 
 ### $HYPE Token
 
@@ -147,7 +147,13 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 ### Builders
 
-**GET /builders/{builder}/fills** — Trade fills attributed to a builder code. Params: `builder` (path), `start` (required), `end`, `coin`, `limit`, `nextCursor`, `address`, `fillType`, `side`.
+**GET /builders/list/timeframe/{timeframe}** — Full list of all builders on Hyperliquid for a given timeframe, ordered by revenue (descending). Params: `timeframe` (path, enum: `24h`, `7d`, `30d`, `all`).
+
+**GET /builders/{builder}/profile** — Comprehensive profile for a builder address. Returns identity, revenues, fee rates, and a full breakdown of analytics across 24h/7d/30d/all-time timeframes. Params: `builder` (path).
+
+**GET /builders/all-time-revenue** — All-time daily revenue data for builders.
+
+**GET /builders/{builder}/fills** — Trade fills attributed to a builder code. Params: `builder` (path), `start` (required), `end`, `coin`, `limit`, `nextCursor`, `address`, `fillType` (enum: `perp`, `spot`), `side`.
 
 **GET /builders/{builder}/users** — Users attributed to a builder code. Params: `builder` (path), `offset`, `limit`, `order`, `orderBy`, `period`.
 
@@ -167,7 +173,7 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
   }
 ]
 ```
-Returns all 16 segments. Each has a `bias` array with ~6 data points over a 12-hour rolling window. Positive = net long, negative = net short.
+Returns data for the requested segment. The `bias` array contains ~6 data points over a 12-hour rolling window. Positive = net long, negative = net short. Call once per segment ID to get all 16 cohorts.
 
 ### /{segmentId}/assets/liquidation-risk
 ```json
