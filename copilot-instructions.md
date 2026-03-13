@@ -163,17 +163,22 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 ### /segments/{segmentId}/bias-history
 ```json
-[
-  {
-    "segment": {"id": 9, "name": "Smart Money", "category": "pnl", "criteria": {"minPnl": 100000, "maxPnl": 1000000}},
-    "bias": [
-      {"timestamp": "2026-03-01T00:10:00.018Z", "bias": 0.42},
-      {"timestamp": "2026-03-01T02:10:00.132Z", "bias": 0.38}
-    ]
-  }
-]
+{
+  "segment": {"id": 9, "name": "Smart Money", "category": "pnl", "criteria": {"minPnl": 100000, "maxPnl": 1000000}},
+  "nextCursor": null,
+  "positionRecencyTimeframe": "all",
+  "start": "2026-03-03T08:10:00.099Z",
+  "end": "2026-03-04T08:10:00.099Z",
+  "pageStart": "2026-03-04T08:10:00.075Z",
+  "pageEnd": "2026-03-03T08:10:00.388Z",
+  "historySnapshotStructure": ["timestamp", "bias", "exposureRatio", "openValue", "openLongValue", "openShortValue", "activePerpEquity"],
+  "history": [
+    ["2026-03-04T08:10:00.075Z", 0.81, 2.95, 169578077.10, 108075482.73, 61502594.37, 57458083.37],
+    ["2026-03-04T06:10:00.019Z", 0.91, 3.02, 173871275.29, 113170965.45, 60700309.84, 57517772.99]
+  ]
+}
 ```
-Returns data for the requested segment. The `bias` array contains ~6 data points over a 12-hour rolling window. Positive = net long, negative = net short. Call once per segment ID to get all 16 cohorts.
+Returns data for the requested segment. The `history` array uses columnar format defined by `historySnapshotStructure`. Positive bias = net long, negative = net short. Call once per segment ID to get all 16 cohorts.
 
 ### /{segmentId}/assets/liquidation-risk
 ```json
@@ -189,7 +194,31 @@ Returns data for the requested segment. The `bias` array contains ~6 data points
 ```json
 {
   "orders": [
-    {"coin": "BTC", "side": "B", "limitPx": 85000, "sz": 0.5, "orderType": "Limit", "address": "0x...", "oid": 756322353, "snapshotTs": "2026-03-01T10:35:00.000Z"}
+    {
+      "height": 922290820,
+      "address": "0xdef1...",
+      "oid": 756322353,
+      "coin": "BTC",
+      "side": "B",
+      "limitPx": 21500,
+      "sz": 0.00465,
+      "timestamp": "2023-07-18T10:30:51.626Z",
+      "triggerCondition": "N/A",
+      "isTrigger": false,
+      "triggerPx": 0,
+      "children": [],
+      "isPositionTpsl": false,
+      "reduceOnly": false,
+      "orderType": "Limit",
+      "origSz": 0,
+      "tif": "",
+      "cloid": "",
+      "status": "open",
+      "builder": "",
+      "builderFee": 0,
+      "untriggered": false,
+      "snapshotTs": "2026-03-13T09:40:00.000Z"
+    }
   ],
   "nextCursor": "eyJ..."
 }
