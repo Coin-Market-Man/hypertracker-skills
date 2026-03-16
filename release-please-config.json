@@ -1,0 +1,12 @@
+{
+  "branches": [
+    "main",
+    { "name": "rc", "prerelease": true }
+  ],
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "@coinmarketman/hypertracker-skills"
+    }
+  }
+}
