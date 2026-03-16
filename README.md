@@ -8,7 +8,7 @@ AI coding assistant skill files for the [HyperTracker API](https://app.coinmarke
 
 ```bash
 # Claude Code
-npx @coinmarketman/hypertracker-skills --claude
+npx skills add Coin-Market-Man/hypertracker-skills
 
 # Cursor
 npx @coinmarketman/hypertracker-skills --cursor
@@ -20,7 +20,7 @@ npx @coinmarketman/hypertracker-skills --copilot
 npx @coinmarketman/hypertracker-skills --agents
 ```
 
-### Everyone else (Python, Ruby, no Node, etc.) — curl
+### No Node/npm? Use curl
 
 ```bash
 # Claude Code
@@ -63,9 +63,5 @@ Each file contains the same complete reference:
 
 
 
----
-
-— The HyperTracker Team
-A Coin Market Manager product
-
-© Coin Market Manager. Licensed under CC BY 4.0.
+## Maintained by
+HyperTracker Team at Coin Market Manager

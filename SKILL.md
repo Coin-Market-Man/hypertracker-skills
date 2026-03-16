@@ -1,3 +1,8 @@
+---
+name: hypertracker
+description: Access Hyperliquid cohort analytics, order flow, liquidation risk, and leaderboards via the HyperTracker API. Use when analyzing trader behavior, checking liquidation risk, tracking whale positions, studying order flow patterns, or building trading dashboards.
+---
+
 # HyperTracker API
 
 Pre-computed intelligence layer for Hyperliquid, the largest on-chain perpetual futures exchange. Cohort analytics, live order flow, liquidation risk scoring, leaderboards, and more. All data is independently aggregated and not available through the standard Hyperliquid API.

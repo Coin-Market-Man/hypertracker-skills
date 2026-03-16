@@ -24,7 +24,7 @@ switch (flag) {
     break;
   case '--copilot':
     copy(
-      path.join(pkg, '.github', 'copilot-instructions.md'),
+      path.join(pkg, 'copilot-instructions.md'),
       path.join(process.cwd(), '.github', 'copilot-instructions.md')
     );
     break;

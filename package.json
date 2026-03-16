@@ -10,7 +10,7 @@
     "SKILL.md",
     "AGENTS.md",
     ".cursorrules",
-    ".github/copilot-instructions.md",
+    "copilot-instructions.md",
     "hypertracker-skill-generic.md",
     "README.md"
   ],
@@ -27,8 +27,7 @@
     "hypertracker"
   ],
   "author": "Coin Market Manager",
-  "license": "CC-BY-4.0",
-  "repository": {
+"repository": {
     "type": "git",
     "url": "git+https://github.com/Coin-Market-Man/hypertracker-skills.git"
   },
