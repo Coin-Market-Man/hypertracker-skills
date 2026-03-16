@@ -1,0 +1,39 @@
+{
+  "name": "@coinmarketman/hypertracker-skills",
+  "version": "0.0.1",
+  "description": "AI assistant skill files for the HyperTracker API — cohort analytics, order flow, liquidation risk, and leaderboard data from Hyperliquid",
+  "bin": {
+    "hypertracker-skills": "bin/install.js"
+  },
+  "files": [
+    "bin/",
+    "SKILL.md",
+    "AGENTS.md",
+    ".cursorrules",
+    ".github/copilot-instructions.md",
+    "hypertracker-skill-generic.md",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "hyperliquid",
+    "trading",
+    "ai-skills",
+    "claude",
+    "cursor",
+    "copilot",
+    "hypertracker"
+  ],
+  "author": "Coin Market Manager",
+  "license": "CC-BY-4.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Coin-Market-Man/hypertracker-skills.git"
+  },
+  "homepage": "https://github.com/Coin-Market-Man/hypertracker-skills#readme",
+  "bugs": {
+    "url": "https://github.com/Coin-Market-Man/hypertracker-skills/issues"
+  }
+}

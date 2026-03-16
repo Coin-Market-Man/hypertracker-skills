@@ -4,22 +4,44 @@ AI coding assistant skill files for the [HyperTracker API](https://app.coinmarke
 
 ## Quick Install
 
-### Claude Code
+### Node / npm
+
 ```bash
-npx skills add Coin-Market-Man/hypertracker-skills
+# Claude Code
+npx @coinmarketman/hypertracker-skills --claude
+
+# Cursor
+npx @coinmarketman/hypertracker-skills --cursor
+
+# GitHub Copilot
+npx @coinmarketman/hypertracker-skills --copilot
+
+# OpenAI Codex / Agents
+npx @coinmarketman/hypertracker-skills --agents
 ```
 
-### Cursor
-Copy `.cursorrules` to your project root.
+### Everyone else (Python, Ruby, no Node, etc.) — curl
 
-### GitHub Copilot
-Copy `.github/copilot-instructions.md` to your project's `.github/` directory.
+```bash
+# Claude Code
+curl -fsSL https://raw.githubusercontent.com/Coin-Market-Man/hypertracker-skills/main/SKILL.md \
+  --create-dirs -o ~/.claude/skills/hypertracker-skills/SKILL.md
 
-### OpenAI Codex
-Copy `AGENTS.md` to your project root.
+# Cursor
+curl -fsSL https://raw.githubusercontent.com/Coin-Market-Man/hypertracker-skills/main/.cursorrules \
+  -o .cursorrules
 
-### ChatGPT / Gemini / DeepSeek / Qwen
-Paste the contents of `hypertracker-skill-generic.md` into your system prompt or custom instructions.
+# GitHub Copilot
+curl -fsSL https://raw.githubusercontent.com/Coin-Market-Man/hypertracker-skills/main/copilot-instructions.md \
+  --create-dirs -o .github/copilot-instructions.md
+
+# OpenAI Codex / Agents
+curl -fsSL https://raw.githubusercontent.com/Coin-Market-Man/hypertracker-skills/main/AGENTS.md \
+  -o AGENTS.md
+```
+
+### ChatGPT / Gemini / DeepSeek / Qwen — manual
+Paste contents of `hypertracker-skill-generic.md` into your system prompt or custom instructions.
 
 ## What's Inside
 
@@ -43,5 +65,7 @@ Each file contains the same complete reference:
 
 ---
 
-— The HyperTracker Team  
+— The HyperTracker Team
 A Coin Market Manager product
+
+© Coin Market Manager. Licensed under CC BY 4.0.
