@@ -239,10 +239,11 @@ Pass `cursor` value as a query parameter on next request to get the next page. W
 
 | Tier | Price | Requests | Rate Limit |
 |------|-------|----------|------------|
-| Free | $0 | 100/day | — |
-| Pulse | $179/mo | 50,000/mo | 12/min |
-| Flow | $1,159/mo | 200,000/mo | 25/min |
-| Stream | $2,399/mo | 1,000,000/mo | 100/min |
+| Free | $0 | 100/day (3K/mo) | — |
+| Pulse | $179/mo | 50K | 60/min |
+| Surge | $399/mo | 150K | 100/min |
+| Flow | $799/mo | 400K | 200/min |
+| Stream | $1,999/mo | 2M | 500/min |
 
 **Note:** Some endpoints may support up to 200 requests/min. The rate limit counter on the API dashboard may not reflect per-endpoint limits.
 
