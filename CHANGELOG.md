@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.3](https://github.com/Coin-Market-Man/hypertracker-skills/compare/hypertracker-skills-v0.0.2...hypertracker-skills-v0.0.3) (2026-03-19)
+
+
+### Bug Fixes
+
+* update hypertracker prices ([#7](https://github.com/Coin-Market-Man/hypertracker-skills/issues/7)) ([#8](https://github.com/Coin-Market-Man/hypertracker-skills/issues/8)) ([b5be1dd](https://github.com/Coin-Market-Man/hypertracker-skills/commit/b5be1dd063ef2db8602cd145727a6142e7f71f22))
+
 ## [0.0.2](https://github.com/Coin-Market-Man/hypertracker-skills/compare/hypertracker-skills-v0.0.1...hypertracker-skills-v0.0.2) (2026-03-16)
 
 
