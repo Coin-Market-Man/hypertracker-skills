@@ -61,7 +61,7 @@ Each file contains the same complete reference:
 - [Get your API key](https://app.coinmarketman.com/hypertracker/api-dashboard)
 - [API Docs](https://docs.coinmarketman.com)
 - [HyperTracker Site](https://hypertracker.io)
-- [CoinMarketMan Site](https://coinmarketman.io)
+- [CoinMarketMan Site](https://coinmarketman.com)
 - [Discord](https://discord.gg/TWjJuNGw)
 - [X](https://x.com/HyperTracker)
 - [Telegram](https://t.me/HyperTrackerio)
