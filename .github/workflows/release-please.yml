@@ -26,12 +26,17 @@ jobs:
       - uses: actions/setup-node@v4
         if: ${{ steps.release.outputs.release_created }}
         with:
-          node-version: 20
+          node-version: 22
           registry-url: https://registry.npmjs.org
+
+      - run: npm i -g npm@latest
+        if: ${{ steps.release.outputs.release_created }}
 
       - name: Publish to npm
         if: ${{ steps.release.outputs.release_created }}
         run: |
+          node --version
+          npm --version
           if [[ "${{ github.ref }}" == "refs/heads/rc" ]]; then
             npm publish --provenance --access public --tag rc
           else
