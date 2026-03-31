@@ -77,7 +77,7 @@ Every wallet on Hyperliquid is classified into 16 behavioral segments across two
 | 14 | Full Rekt | -$1M - -$100K |
 | 15 | Giga-Rekt | Below -$1M |
 
-PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segment/{sizeSegmentId}`. Call `GET /segments` to confirm latest ID mapping.
+All 16 cohorts (both PnL and size) use `/segment/{segmentId}`. A separate `/position-size-bucket/{sizeBucketId}` endpoint (IDs 1-10) provides metrics by individual position size ranges, independent of cohort classification. Call `GET /segments` to confirm latest ID mapping.
 
 ---
 
@@ -89,19 +89,27 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 **GET /segments/{segmentId}/bias-history** — Bias history for a specific cohort. Negative = net short, positive = net long. Params: `segmentId` (path), `limit`, `nextCursor`, `start`, `end`, `positionRecencyTimeframe` (enum: `24h`, `7d`, `30d`, `all`; default: `all`). To get all cohorts, call once per segment ID.
 
-**GET /segments/{segmentId}/summary** — Per-segment summary: trader counts, aggregate positioning. Params: `segmentId` (path), `positionAge`.
+**GET /segments/{segmentId}/summary** — Per-segment summary: trader counts, aggregate positioning, top 10 open perps. Params: `segmentId` (path), `positionAge` (enum: `all`, `24h`, `7d`, `30d`; default: `all` — filter positions by age).
 
 ### Positions & Market Exposure
 
-**GET /positions** — Individual open positions. Params: `start` (required), `end`, `coin`, `segmentId` (filter by cohort ID), `address` (array, use `address[]=0x...`), `open`, `limit`, `nextCursor`. Historical from April 2025. Also available as "Get All Positions by Cohort" on the Cohorts subpage.
+**GET /positions** — Historic positions. Params: `start` (required), `end`, `coin`, `segmentId` (filter by cohort ID), `address` (array, use `address[]=0x...`), `open`, `limit`, `nextCursor`. Historical from April 2025. Returns tens of thousands of positions per call with pre-computed data (PnL segments, size segments, leverage, liquidation progress, funding, entry price, unrealized PnL).
 
-**GET /position-metrics/general** — Exchange-level OI, position counts, aggregate metrics. Params: `start`, `end`, `limit`, `nextCursor`.
+**GET /positions/coins** — Summary of position count by coin. Returns total long/short values and position counts per coin across the entire exchange. No parameters beyond auth. Use this for a quick market-wide snapshot of where capital is deployed.
 
-**GET /position-metrics/coin/{coin}** — Per-coin long/short breakdown, OI, trader counts. Params: `coin` (path), `start`, `end`, `limit`, `nextCursor`.
+**GET /positions/metrics** — Metrics for specific positions by ID. Params: `ids` (required, array, max 50 position IDs — 64-char hex), `start`, `end`, `limit`, `nextCursor`. Returns liquidation price, mark price, position value, and unrealized PnL over time.
 
-**GET /position-metrics/coin/{coin}/segment/{segmentId}** — Per-coin, per-PnL-cohort metrics. Compare Smart Money (9) vs Exit Liquidity (12). Params: `coin`, `segmentId` (path), `start`, `end`, `limit`, `nextCursor`.
+**GET /positions/open/coin/{coin}** — Download latest open positions snapshot for a coin as CSV. Params: `coin` (path). Returns 302 redirect to presigned S3 URL. CSV columns include: id, address, coin, side, dex, size, value, entryPrice, unrealizedPnl, funding, liquidationPrice, liquidationProgress, crossLeverage, isolatedLeverage, openTime, and full profile data (totalEquity, perpEquity, countOpenPositions, pnl, balance, perpPnlSegmentId, sizeSegmentId).
 
-**GET /position-metrics/coin/{coin}/position-size-segment/{sizeSegmentId}** — Per-coin, per-size-tier metrics. Params: `coin`, `sizeSegmentId` (path), `start`, `end`, `limit`, `nextCursor`.
+**GET /coin/{coin}/open-positions/history** — Historical open positions snapshot entries for a coin. Params: `coin` (path), `start`, `end`, `nextCursor`. Returns snapshot metadata with download URLs.
+
+**GET /position-metrics/general** — Exchange-level OI, position counts, aggregate metrics. Params: `start` (required), `end`, `limit`, `nextCursor`.
+
+**GET /position-metrics/coin/{coin}** — Per-coin long/short breakdown, OI, trader counts. Params: `coin` (path), `start` (required), `end`, `limit`, `nextCursor`.
+
+**GET /position-metrics/coin/{coin}/segment/{segmentId}** — Per-coin, per-cohort metrics. Works for all 16 segments (both PnL and size cohorts). Compare Smart Money (9) vs Exit Liquidity (12), or Leviathan (7) vs Shrimp (16). Params: `coin`, `segmentId` (path, enum: 1-16), `start`, `end`, `limit`, `nextCursor`.
+
+**GET /position-metrics/coin/{coin}/position-size-bucket/{sizeBucketId}** — Per-coin position metrics by position size buckets (not cohorts). Size buckets are based on individual position size, IDs 1-10 (ranging from <$1K to >$2.5M). Params: `coin`, `sizeBucketId` (path), `start` (required), `end`, `limit`, `nextCursor`.
 
 ### Order Flow
 
@@ -110,6 +118,8 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 **GET /orders/5m-snapshots/{snapshotTime}** — Historical snapshot at a specific time. Params: `snapshotTime` (path, must be 5-min boundary, after floor date), `coin`, `limit`, `nextCursor`, `address`, `oid`, `start`, `end`, `orderType`.
 
 **GET /orders/5m-snapshots/latest-snapshot-timestamp** — Returns the most recent available snapshot timestamp.
+
+**GET /orders/5m-snapshots/{snapshotTime}/download** — Download link for a specific 5-minute order snapshot. Params: `snapshotTime` (path, ISO 8601, must be 5-min boundary, after floor date). Returns presigned download URL.
 
 **GET /orders/5m-snapshots/coins/{coin}/download** — Download all order snapshots for a coin as a file.
 
@@ -121,17 +131,19 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 ### Leaderboards
 
-**GET /leaderboards/perp-pnl** — Top traders by PnL. Params: `rankBy`, `limit`, `offset`, `order`, `orderBy`.
+**GET /leaderboards/perp-pnl** — Top traders by perp PnL. Params: `rankBy`, `limit`, `offset`, `order`, `orderBy`.
+
+**GET /leaderboards/all-pnl** — Top traders by all PnL (perps + spot + vaults). Broader than perp-only leaderboard. Params: `rankBy` (required, enum: `pnlAllTime`, `pnlMonth`, `pnlWeek`, `pnlDay`), `order` (required, `asc`/`desc`), `orderBy` (required, same enum as rankBy), `limit`, `offset`. Returns totalCount, sumPnl, assetsDistribution, and full trader data.
 
 **GET /leaderboards/perp-pnl/{period}/download** — Download leaderboard data for a given period. Params: `period` (path, enum: `all`, `30d`, `7d`, `24h`).
 
 ### Fills
 
-**GET /fills** — Trade executions. Params: `start` (required), `end` (same day), `coin` (array, e.g. `coin[]=BTC`), `limit`, `nextCursor`, `address`, `builder`, `side`. 24hr max window. Historical from July 2025.
+**GET /fills** — Trade executions. Params: `start` (required), `end` (same day), `coin` (array, e.g. `coin[]=BTC`), `limit`, `nextCursor`, `address`, `builder`, `side` (enum: `A` = sell/ask, `B` = buy/bid). 24hr max window. Historical from July 2025.
 
 ### Volume Metrics
 
-**GET /metrics/perp-volume** — Aggregate volume metrics. Params: `start`, `end`, `limit`, `nextCursor`.
+**GET /metrics/perp-volume** — Aggregate volume metrics. Params: `start` (required), `end`, `limit`, `nextCursor`.
 
 ### Wallets
 
@@ -151,11 +163,41 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 **GET /builders/{builder}/profile** — Comprehensive profile for a builder address. Returns identity, revenues, fee rates, and a full breakdown of analytics across 24h/7d/30d/all-time timeframes. Params: `builder` (path).
 
-**GET /builders/all-time-revenue** — All-time daily revenue data for builders.
+**GET /builders/all-time-revenue** — All-time revenue, daily revenue, and user statistics for builders. Returns columnar data: `["revenue", "timestamp", "countUsers"]`.
 
-**GET /builders/{builder}/fills** — Trade fills attributed to a builder code. Params: `builder` (path), `start` (required), `end`, `coin`, `limit`, `nextCursor`, `address`, `fillType` (enum: `perp`, `spot`), `side`.
+**GET /builders/{builder}/fills** — Trade fills attributed to a builder code. Params: `builder` (path), `start` (required), `end`, `coin`, `limit`, `nextCursor`, `address`, `fillType` (enum: `perp`, `spot`), `side` (enum: `A` = sell/ask, `B` = buy/bid).
 
 **GET /builders/{builder}/users** — Users attributed to a builder code. Params: `builder` (path), `offset`, `limit`, `order`, `orderBy`, `period`.
+
+### Per-Asset Segment Metrics
+
+**GET /perps/coin/{coin}/segment-metrics** — Metrics for a specific coin broken down by each segment. Params: `coin` (path).
+
+### Address Management
+
+Manage your tracked address list. Useful for building custom watchlists and alert pipelines.
+
+**GET /addresses** — List your tracked addresses. Params: `offset`, `limit` (default: 100), `addresses` (array, filter by specific addresses).
+
+**POST /addresses/bulk** — Add addresses to your list. Body: `{ "addresses": ["0x...", "0x..."] }`.
+
+**DELETE /addresses/bulk** — Remove addresses from your list. Body: `{ "addresses": ["0x...", "0x..."] }`.
+
+**PUT /addresses/sync** — Replace your entire address list. Body: `{ "addresses": ["0x...", "0x..."] }`.
+
+### Hyperliquid Info Proxy
+
+**POST /info** — Proxy to Hyperliquid's `/info` API through HyperTracker. Body: `{ "type": "<infoType>" }` with optional `user` (address), `dex`, `builder`. Supported types include: `meta`, `spotMeta`, `clearinghouseState`, `spotClearinghouseState`, `exchangeStatus`, `liquidatable`, `openOrders`, `frontendOpenOrders`, `userFees`, `userRateLimit`, `subAccounts`, and more.
+
+### System Status
+
+**GET /hypertracker/state/status** — HyperTracker system state and data freshness.
+
+### File Exports
+
+**GET /exports/{file}** — Download a general export file. Params: `file` (path, enum: `segments-bias-charts-data-24h`, `total-wallets-equity-chart-data`).
+
+**GET /exports/coins/{coin}/{file}** — Download a coin-specific export file. Params: `coin` (path), `file` (path, enum: `segment-metrics`, `position-metrics`, `position-breakdown-by-size`, `position-breakdown-by-cohort`, `liquidation-heatmap`).
 
 ---
 
@@ -224,25 +266,61 @@ Returns data for the requested segment. The `history` array uses columnar format
 }
 ```
 
-### Paginated response (positions, fills, etc.)
+### /positions/coins
+```json
+[
+  {"coin": "BTC", "totalValue": 2870625844.50, "totalValueLong": 1580344214.48, "totalValueShort": 1290281630.02, "count": 45230, "countLong": 24150, "countShort": 21080},
+  {"coin": "ETH", "totalValue": 1435312922.25, "totalValueLong": 790422107.24, "totalValueShort": 644890815.01, "count": 31450, "countLong": 17200, "countShort": 14250}
+]
+```
+Quick market-wide snapshot: total long/short values and position counts per coin.
+
+### /leaderboards/all-pnl
 ```json
 {
-  "data": [...],
-  "cursor": "eyJsYXN0SWQiOiAxMjM0NX0="
+  "totalCount": 150000,
+  "sumPnl": 45230000.50,
+  "assetsDistribution": [...],
+  "data": [
+    {"address": "0xabc1...", "age": 365, "totalValue": 5200000.00, "stableValue": 1200000.00, "topHolding": "BTC", "pnlAllTime": 15230000.50, "pnlMonth": 1230000.00, "pnlWeek": 450000.00, "pnlDay": 85000.00, "rank": 1, "profile": {...}}
+  ]
 }
 ```
-Pass `cursor` value as a query parameter on next request to get the next page. When `cursor` is `null`, you've reached the end.
+Broader than the perp-only leaderboard. Includes perps + spot + vaults PnL.
+
+### /builders/all-time-revenue
+```json
+{
+  "columns": ["revenue", "timestamp", "countUsers"],
+  "data": [
+    [1250.50, "2026-03-30T00:00:00.000Z", 342],
+    [1180.25, "2026-03-29T00:00:00.000Z", 328]
+  ]
+}
+```
+Daily revenue and user counts for all builders over time.
+
+### Paginated responses
+Paginated endpoints return results in a named array with a `nextCursor` field. The array key varies by endpoint (`positions`, `fills`, `orders`, `items`, etc.).
+```json
+{
+  "positions": [...],
+  "nextCursor": "eyJsYXN0SWQiOiAxMjM0NX0="
+}
+```
+Pass `nextCursor` value as `cursor` query parameter on the next request to get the next page. When `nextCursor` is `null`, you've reached the end.
 
 ---
 
 ## Rate Limits
 
-| Tier | Price | Requests | Rate Limit |
-|------|-------|----------|------------|
-| Free | $0 | 100/day | — |
-| Pulse | $179/mo | 50,000/mo | 12/min |
-| Flow | $1,159/mo | 200,000/mo | 25/min |
-| Stream | $2,399/mo | 1,000,000/mo | 100/min |
+| Tier | Price | Requests | Rate Limit | Webhooks | WebSocket |
+|------|-------|----------|------------|----------|-----------|
+| Free | $0 | 100/day | — | No | No |
+| Pulse | $179/mo | 50,000/mo | 60/min | No | No |
+| Surge | $399/mo | 150,000/mo | 100/min | No | No |
+| Flow | $799/mo | 400,000/mo | 200/min | Yes | No |
+| Stream | $1,999/mo | 2,000,000/mo | 500/min | Yes | Yes |
 
 **Note:** Some endpoints may support up to 200 requests/min. The rate limit counter on the API dashboard may not reflect per-endpoint limits.
 
@@ -285,14 +363,14 @@ params = {
 ### Cursor Pagination
 ```python
 cursor = None
-all_data = []
+all_positions = []
 while True:
     params = {"start": start, "end": end, "coin": "BTC"}
     if cursor:
         params["cursor"] = cursor
     resp = requests.get(url + "/positions", headers=headers, params=params).json()
-    all_data.extend(resp["data"])
-    cursor = resp.get("cursor")
+    all_positions.extend(resp["positions"])
+    cursor = resp.get("nextCursor")
     if not cursor:
         break
 ```
@@ -344,7 +422,7 @@ Endpoints: `/segments/{segmentId}/bias-history`, `/{segmentId}/assets/liquidatio
 Composite score from cohort sentiment, liquidation proximity, and OI trends. Display as a simple gauge with color-coded zones. One-page HTML.
 
 **"Show me what whales are doing vs retail on BTC"**
-Endpoints: `/position-metrics/coin/BTC/segment/9`, `/position-metrics/coin/BTC/position-size-segment/7`, `/position-metrics/coin/BTC/position-size-segment/16`
+Endpoints: `/position-metrics/coin/BTC/segment/9`, `/position-metrics/coin/BTC/segment/7`, `/position-metrics/coin/BTC/segment/16`
 Compare Leviathan (7) and Smart Money (9) positioning against Shrimp (16). Show who's long, who's short, and whether they agree.
 
 ### Dashboards
