@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0](https://github.com/Coin-Market-Man/hypertracker-skills/compare/hypertracker-skills-v0.0.4...hypertracker-skills-v0.1.0) (2026-04-06)
+
+
+### Features
+
+* Release new endpoints  ([#16](https://github.com/Coin-Market-Man/hypertracker-skills/issues/16)) ([9ca8430](https://github.com/Coin-Market-Man/hypertracker-skills/commit/9ca8430651b973c1bc446d0de654854499a4c5ec))
+
 ## [0.0.4](https://github.com/Coin-Market-Man/hypertracker-skills/compare/hypertracker-skills-v0.0.3...hypertracker-skills-v0.0.4) (2026-03-23)
 
 
