@@ -93,7 +93,7 @@ All 16 cohorts (both PnL and size) use `/segment/{segmentId}`. A separate `/posi
 
 ### Positions & Market Exposure
 
-**GET /positions** — Historic positions. Params: `start` (required), `end`, `coin`, `segmentId` (filter by cohort ID), `address` (array, use `address[]=0x...`), `open`, `limit`, `nextCursor`. Historical from April 2025. Returns tens of thousands of positions per call with pre-computed data (PnL segments, size segments, leverage, liquidation progress, funding, entry price, unrealized PnL).
+**GET /positions** — Historic positions. Params: `start` (required), `end`, `coin`, `segmentId` (filter by cohort ID), `address` (array, use `address[]=0x...`), `open`, `limit`, `nextCursor`. Historical from April 2025. Returns tens of thousands of positions per call with pre-computed data (PnL segments, size segments, leverage, liquidation progress, funding, entry price, unrealized PnL). Can also be used for reverse-lookups: given a coin, side, leverage, and entry price from a Hyperliquid PnL share card or screenshot, filter open positions to identify matching wallets (see Reverse Lookup prompts and code pattern below).
 
 **GET /positions/coins** — Summary of position count by coin. Returns total long/short values and position counts per coin across the entire exchange. No parameters beyond auth. Use this for a quick market-wide snapshot of where capital is deployed.
 
@@ -308,7 +308,7 @@ Paginated endpoints return results in a named array with a `nextCursor` field. T
   "nextCursor": "eyJsYXN0SWQiOiAxMjM0NX0="
 }
 ```
-Pass `nextCursor` value as `cursor` query parameter on the next request to get the next page. When `nextCursor` is `null`, you've reached the end.
+Pass the `nextCursor` value as the `nextCursor` query parameter on the next request to get the next page. When `nextCursor` is `null`, you've reached the end.
 
 ---
 
@@ -367,7 +367,7 @@ all_positions = []
 while True:
     params = {"start": start, "end": end, "coin": "BTC"}
     if cursor:
-        params["cursor"] = cursor
+        params["nextCursor"] = cursor
     resp = requests.get(url + "/positions", headers=headers, params=params).json()
     all_positions.extend(resp["positions"])
     cursor = resp.get("nextCursor")
@@ -394,6 +394,47 @@ for day_offset in range(5):
 def align_to_5min(dt):
     return dt.replace(minute=(dt.minute // 5) * 5, second=0, microsecond=0)
 ```
+
+### Reverse Lookup: Match a PnL share card to wallets
+
+A Hyperliquid PnL share card surfaces coin, side, leverage, entry price, mark price, and ROI. Reverse-lookup candidates like this:
+
+```python
+def find_positions_matching_card(coin, side, leverage, entry_price,
+                                  entry_tolerance=0.05, start="2026-01-01T00:00:00.000Z"):
+    matches = []
+    cursor = None
+    while True:
+        params = {"coin": coin, "open": True, "start": start, "limit": 500}
+        if cursor: params["nextCursor"] = cursor
+        r = requests.get(f"{BASE}/positions", headers=HEADERS, params=params).json()
+        for p in r["positions"]:
+            # side is lowercase string: "long" or "short"
+            if p["side"] != side.lower(): continue
+            lev = float(p.get("crossLeverage") or p.get("isolatedLeverage") or 0)
+            if abs(lev - leverage) > 0.5: continue
+            if abs(float(p["entryPrice"]) - entry_price) > entry_tolerance: continue
+            matches.append(p)
+        cursor = r.get("nextCursor")
+        if not cursor: break
+    return matches
+
+# Look up matched wallets for cohort context
+def lookup_wallet(address):
+    r = requests.get(f"{BASE}/wallets", headers=HEADERS, params={"address": address}).json()
+    return r["items"][0] if r.get("items") else None
+    # wallet["segments"] is an array of 2 IDs: one size cohort (1-7, 16), one PnL cohort (8-15)
+```
+
+**Match dimensions available on each position:** `side` (string: `"long"` or `"short"`), `crossLeverage`/`isolatedLeverage`, `entryPrice`, `size`, `openTime`, `unrealizedPnl`, `profile.segments` (array of 2 cohort IDs — one size-based, one PnL-based; see Cohort Segments table).
+
+**ROI from a card (short):** `(entry - mark) / entry * leverage * 100`. Long: flip the numerator. Use this to sanity-check a candidate, not to match on, since the card's mark price is frozen at share time.
+
+**Tolerances worth trying:** 0.05 (tight, Hyperliquid cards round to 2dp), 0.5 (loose, catches rounding), 1.0 (very loose, last resort).
+
+**Disambiguating multiple matches:** smallest `size` is often the share-card author (retail flex pattern), but not guaranteed. Consider surfacing all matches with size and open time rather than auto-picking. Use the card's `markPrice` as a tiebreaker: the candidate whose current API `markPrice` is closest to the card's mark is the strongest match, since mark prices vary by position (different mark sources at different timestamps).
+
+**Shortcut: cohort data is on the position itself.** Each position includes `profile.segments` (array of 2 cohort IDs). You can skip the `/wallets` lookup if you only need cohort classification. Use `/wallets` when you also want `totalEquity`, `perpPnl`, or `displayName`.
 
 ---
 
@@ -465,6 +506,28 @@ Rank by risk score, pull OI for top 5 riskiest, color-code severity, refresh eve
 Endpoints: `/leaderboards/perp-pnl?rankBy=pnlDay&limit=25`, `/wallets`
 Fetch leaderboard, look up wallets, poll for changes every 5 minutes.
 
+### Reverse Lookup
+
+**"Whose wallet is behind this Hyperliquid PnL share card?" / "Identify this trader" / "Who opened this position?"**
+Endpoints: `/positions?coin={coin}&open=true`, `/wallets?address={address}`
+A Hyperliquid share card or screenshot exposes: coin, side, leverage, entryPrice, markPrice, ROI%. If the user provides an image, extract these values from the card first. The first four are matchable against open positions; the mark on the card is frozen in time so re-derive the card's implied ROI from entry/mark instead of matching on mark directly. Pull open positions for the coin, filter by side and leverage (±0.5), rank candidates by entry-price proximity. Tighten to an exact entry match first; widen the tolerance if zero hits. Multiple matches are normal — share cards aren't unique. Look up the matched address via `GET /wallets?address={address}` for cohort segments, total equity, and PnL context.
+
+**"I only have the coin, side, and ROI — no entry price"**
+Endpoints: `/positions?coin={coin}&open=true`, `/wallets?address={address}`
+If entry price is missing, filter by coin + side + leverage only, then rank candidates by how closely their computed ROI matches the card's ROI. Short ROI: `(entry - mark) / entry * leverage * 100`. Long ROI: `(mark - entry) / entry * leverage * 100`. Current mark price from the API may differ from the card's mark, so this is a fuzzy match — present multiple candidates rather than picking one.
+
+**"The card doesn't match any currently open positions"**
+Endpoints: `/positions?coin={coin}&open=false&start=...`, `/coin/{coin}/open-positions/history`
+Card may represent a closed trade or an older snapshot. Query historical positions with `open=false` across a wider time window, or pull a historical open-positions snapshot from `/coin/{coin}/open-positions/history` and match against that instead. Entry price is still the strongest match dimension.
+
+**"Which cohort is behind a given share card?"**
+Endpoints: `/positions?coin={coin}&open=true`, `/wallets?address={address}`
+Match the card to candidate addresses as above, then look up each wallet via `/wallets?address={address}`. Each wallet has a `segments` array containing two IDs: one size-based cohort (IDs 1-7, 16) and one PnL-based cohort (IDs 8-15). Cross-reference with the Cohort Segments table above. If all candidates share a cohort, that's the answer. If they don't, the card is cohort-ambiguous — surface the distribution instead of picking one.
+
+**"Biggest money behind this trade idea, not the specific share card"**
+Endpoints: `/positions?coin={coin}&open=true`, `/position-metrics/coin/{coin}/segment/{segment}`
+Reframe the question: instead of finding the card's author, list all open positions matching the card's direction and leverage band, sorted by position size. Add cohort breakdown to show which segments are positioned this way.
+
 ### Backtesting
 
 **"Backtest: how did Smart Money positioning on BTC predict price moves over the last 4 weeks?"**
@@ -503,7 +566,9 @@ Endpoints: `/position-metrics/coin/{coin}/segment/9`, `/orders/5m-snapshots/late
 | Leaderboard error | `rankBy` must be `pnlAllTime`/`pnlMonth`/`pnlWeek`/`pnlDay`. `limit` must be 25/50/100. |
 | Empty cohort history | `/segments/{segmentId}/bias-history` has limited history. Use `/position-metrics/coin/{coin}/segment/{id}` for longer lookbacks (up to ~4 weeks). |
 | Stale data | Most data refreshes every ~5 minutes. State/summary updates may take up to 15-17 minutes. Wait for next cycle. |
-| No more pages | `cursor` is `null` in the response. You've fetched everything. |
+| No more pages | `nextCursor` is `null` in the response. You've fetched everything. |
+| Reverse lookup: no matches | Widen `entry_tolerance` (try 0.5 then 1.0). If still empty, the position may be closed — retry with `open=false`. For very old cards, use `/coin/{coin}/open-positions/history` for historical snapshots. |
+| Reverse lookup: too many matches | Narrow `entry_tolerance` to 0.05. Use ROI as a sanity check: compute each candidate's ROI and compare to the card's ROI. Candidates whose current `markPrice` is close to the card's mark are strongest. |
 
 ## Links
 
