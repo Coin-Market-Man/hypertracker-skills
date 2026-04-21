@@ -77,7 +77,7 @@ Every wallet on Hyperliquid is classified into 16 behavioral segments across two
 | 14 | Full Rekt | -$1M - -$100K |
 | 15 | Giga-Rekt | Below -$1M |
 
-PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segment/{sizeSegmentId}`. Call `GET /segments` to confirm latest ID mapping.
+All 16 cohorts (both PnL and size) use `/segment/{segmentId}`. A separate `/position-size-bucket/{sizeBucketId}` endpoint (IDs 1-10) provides metrics by individual position size ranges, independent of cohort classification. Call `GET /segments` to confirm latest ID mapping.
 
 ---
 
@@ -89,27 +89,37 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 **GET /segments/{segmentId}/bias-history** — Bias history for a specific cohort. Negative = net short, positive = net long. Params: `segmentId` (path), `limit`, `nextCursor`, `start`, `end`, `positionRecencyTimeframe` (enum: `24h`, `7d`, `30d`, `all`; default: `all`). To get all cohorts, call once per segment ID.
 
-**GET /segments/{segmentId}/summary** — Per-segment summary: trader counts, aggregate positioning. Params: `segmentId` (path), `positionAge`.
+**GET /segments/{segmentId}/summary** — Per-segment summary: trader counts, aggregate positioning, top 10 open perps. Params: `segmentId` (path), `positionAge` (enum: `all`, `24h`, `7d`, `30d`; default: `all` — filter positions by age).
 
 ### Positions & Market Exposure
 
-**GET /positions** — Individual open positions. Params: `start` (required), `end`, `coin`, `limit`, `cursor`. Historical from April 2025.
+**GET /positions** — Historic positions. Params: `start` (required), `end`, `coin`, `segmentId` (filter by cohort ID), `address` (one or more addresses, repeat the param for multiple, e.g. `address=0x...` or `address=0x...&address=0x...`), `open`, `limit`, `nextCursor`. Historical from April 2025. Returns tens of thousands of positions per call with pre-computed data (PnL segments, size segments, leverage, liquidation progress, funding, entry price, unrealized PnL). Can also be used for reverse-lookups: given a coin, side, leverage, and entry price from a Hyperliquid PnL share card or screenshot, filter open positions to identify matching wallets (see Reverse Lookup prompts and code pattern below).
 
-**GET /position-metrics/general** — Exchange-level OI, position counts, aggregate metrics. Params: `start`, `end`.
+**GET /positions/coins** — Summary of position count by coin. Returns total long/short values and position counts per coin across the entire exchange. No parameters beyond auth. Use this for a quick market-wide snapshot of where capital is deployed.
 
-**GET /position-metrics/coin/{coin}** — Per-coin long/short breakdown, OI, trader counts. Params: `start`, `end`.
+**GET /positions/metrics** — Metrics for specific positions by ID. Params: `ids` (required, array, max 50 position IDs — 64-char hex), `start`, `end`, `limit`, `nextCursor`. Returns liquidation price, mark price, position value, and unrealized PnL over time.
 
-**GET /position-metrics/coin/{coin}/segment/{segmentId}** — Per-coin, per-PnL-cohort metrics. Compare Smart Money (9) vs Exit Liquidity (12). Params: `start`, `end`.
+**GET /positions/open/coin/{coin}** — Download latest open positions snapshot for a coin as CSV. Params: `coin` (path). Returns 302 redirect to presigned S3 URL. CSV columns include: id, address, coin, side, dex, size, value, entryPrice, unrealizedPnl, funding, liquidationPrice, liquidationProgress, crossLeverage, isolatedLeverage, openTime, and full profile data (totalEquity, perpEquity, countOpenPositions, pnl, balance, perpPnlSegmentId, sizeSegmentId).
 
-**GET /position-metrics/coin/{coin}/position-size-segment/{sizeSegmentId}** — Per-coin, per-size-tier metrics. Params: `sizeSegmentId` (path), `start`, `end`.
+**GET /coin/{coin}/open-positions/history** — Historical open positions snapshot entries for a coin. Params: `coin` (path), `start`, `end`, `nextCursor`. Returns snapshot metadata with download URLs.
+
+**GET /position-metrics/general** — Exchange-level OI, position counts, aggregate metrics. Params: `start` (required), `end`, `limit`, `nextCursor`.
+
+**GET /position-metrics/coin/{coin}** — Per-coin long/short breakdown, OI, trader counts. Params: `coin` (path), `start` (required), `end`, `limit`, `nextCursor`.
+
+**GET /position-metrics/coin/{coin}/segment/{segmentId}** — Per-coin, per-cohort metrics. Works for all 16 segments (both PnL and size cohorts). Compare Smart Money (9) vs Exit Liquidity (12), or Leviathan (7) vs Shrimp (16). Params: `coin`, `segmentId` (path, enum: 1-16), `start`, `end`, `limit`, `nextCursor`.
+
+**GET /position-metrics/coin/{coin}/position-size-bucket/{sizeBucketId}** — Per-coin position metrics by position size buckets (not cohorts). Size buckets are based on individual position size, IDs 1-10 (ranging from <$1K to >$2.5M). Params: `coin`, `sizeBucketId` (path), `start` (required), `end`, `limit`, `nextCursor`.
 
 ### Order Flow
 
 **GET /orders/5m-snapshots/latest** — Most recent snapshot of every open order. Params: `coin`, `limit`, `nextCursor`, `address`, `oid`, `orderType`. orderType enum: `Limit`, `Stop Limit`, `Stop Market`, `Take Profit Limit`, `Take Profit Market`.
 
-**GET /orders/5m-snapshots/{snapshotTime}** — Historical snapshot at a specific time. Params: `snapshotTime` (path, must be 5-min boundary, after floor date), `coin`, `limit`, `nextCursor`, `address`, `orderType`.
+**GET /orders/5m-snapshots/{snapshotTime}** — Historical snapshot at a specific time. Params: `snapshotTime` (path, must be 5-min boundary, after floor date), `coin`, `limit`, `nextCursor`, `address`, `oid`, `start`, `end`, `orderType`.
 
 **GET /orders/5m-snapshots/latest-snapshot-timestamp** — Returns the most recent available snapshot timestamp.
+
+**GET /orders/5m-snapshots/{snapshotTime}/download** — Download link for a specific 5-minute order snapshot. Params: `snapshotTime` (path, ISO 8601, must be 5-min boundary, after floor date). Returns presigned download URL.
 
 **GET /orders/5m-snapshots/coins/{coin}/download** — Download all order snapshots for a coin as a file.
 
@@ -121,21 +131,23 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 ### Leaderboards
 
-**GET /leaderboards/perp-pnl** — Top traders by PnL. Params: `rankBy`, `limit`, `offset`, `order`, `orderBy`.
+**GET /leaderboards/perp-pnl** — Top traders by perp PnL. Params: `rankBy`, `limit`, `offset`, `order`, `orderBy`.
 
-**GET /leaderboards/perp-pnl/{period}/download** — Download leaderboard data for a given period.
+**GET /leaderboards/all-pnl** — Top traders by all PnL (perps + spot + vaults). Broader than perp-only leaderboard. Params: `rankBy` (required, enum: `pnlAllTime`, `pnlMonth`, `pnlWeek`, `pnlDay`), `order` (required, `asc`/`desc`), `orderBy` (required, same enum as rankBy), `limit`, `offset`. Returns totalCount, sumPnl, assetsDistribution, and full trader data.
+
+**GET /leaderboards/perp-pnl/{period}/download** — Download leaderboard data for a given period. Params: `period` (path, enum: `all`, `30d`, `7d`, `24h`).
 
 ### Fills
 
-**GET /fills** — Trade executions. Params: `start` (required), `end` (same day), `coin` (array, e.g. `coin[]=BTC`), `limit`, `nextCursor`, `address`, `builder`, `side`. 24hr max window. Historical from July 2025.
+**GET /fills** — Trade executions. Params: `start` (required), `end` (same day), `coin` (array, e.g. `coin[]=BTC`), `limit`, `nextCursor`, `address`, `builder`, `side` (enum: `A` = sell/ask, `B` = buy/bid). 24hr max window. Historical from July 2025.
 
 ### Volume Metrics
 
-**GET /metrics/perp-volume** — Aggregate volume metrics. Params: `start`, `end`, `limit`, `nextCursor`.
+**GET /metrics/perp-volume** — Aggregate volume metrics. Params: `start` (required), `end`, `limit`, `nextCursor`.
 
 ### Wallets
 
-**GET /wallets** — Tracked wallets. Params: `offset`, `limit`, `order`, `orderBy`, `segmentIds`, `hasOpenPositions`.
+**GET /wallets** — Tracked wallets. Params: `offset`, `limit`, `order`, `orderBy`, `segmentIds`, `hasOpenPositions`, `address` (filter by individual wallet address).
 
 ### $HYPE Token
 
@@ -147,9 +159,45 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 ### Builders
 
-**GET /builders/{builder}/fills** — Trade fills attributed to a builder code. Params: `builder` (path), `start` (required), `end`, `coin`, `limit`, `nextCursor`, `address`, `fillType`, `side`.
+**GET /builders/list/timeframe/{timeframe}** — Full list of all builders on Hyperliquid for a given timeframe, ordered by revenue (descending). Params: `timeframe` (path, enum: `24h`, `7d`, `30d`, `all`).
+
+**GET /builders/{builder}/profile** — Comprehensive profile for a builder address. Returns identity, revenues, fee rates, and a full breakdown of analytics across 24h/7d/30d/all-time timeframes. Params: `builder` (path).
+
+**GET /builders/all-time-revenue** — All-time revenue, daily revenue, and user statistics for builders. Returns columnar data: `["revenue", "timestamp", "countUsers"]`.
+
+**GET /builders/{builder}/fills** — Trade fills attributed to a builder code. Params: `builder` (path), `start` (required), `end`, `coin`, `limit`, `nextCursor`, `address`, `fillType` (enum: `perp`, `spot`), `side` (enum: `A` = sell/ask, `B` = buy/bid).
 
 **GET /builders/{builder}/users** — Users attributed to a builder code. Params: `builder` (path), `offset`, `limit`, `order`, `orderBy`, `period`.
+
+### Per-Asset Segment Metrics
+
+**GET /perps/coin/{coin}/segment-metrics** — Metrics for a specific coin broken down by each segment. Params: `coin` (path).
+
+### Address Management
+
+Manage your tracked address list. Useful for building custom watchlists and alert pipelines.
+
+**GET /addresses** — List your tracked addresses. Params: `offset`, `limit` (default: 100), `addresses` (array, filter by specific addresses).
+
+**POST /addresses/bulk** — Add addresses to your list. Body: `{ "addresses": ["0x...", "0x..."] }`.
+
+**DELETE /addresses/bulk** — Remove addresses from your list. Body: `{ "addresses": ["0x...", "0x..."] }`.
+
+**PUT /addresses/sync** — Replace your entire address list. Body: `{ "addresses": ["0x...", "0x..."] }`.
+
+### Hyperliquid Info Proxy
+
+**POST /info** — Proxy to Hyperliquid's `/info` API through HyperTracker. Body: `{ "type": "<infoType>" }` with optional `user` (address), `dex`, `builder`. Supported types include: `meta`, `spotMeta`, `clearinghouseState`, `spotClearinghouseState`, `exchangeStatus`, `liquidatable`, `openOrders`, `frontendOpenOrders`, `userFees`, `userRateLimit`, `subAccounts`, and more.
+
+### System Status
+
+**GET /hypertracker/state/status** — HyperTracker system state and data freshness.
+
+### File Exports
+
+**GET /exports/{file}** — Download a general export file. Params: `file` (path, enum: `segments-bias-charts-data-24h`, `total-wallets-equity-chart-data`).
+
+**GET /exports/coins/{coin}/{file}** — Download a coin-specific export file. Params: `coin` (path), `file` (path, enum: `segment-metrics`, `position-metrics`, `position-breakdown-by-size`, `position-breakdown-by-cohort`, `liquidation-heatmap`).
 
 ---
 
@@ -157,17 +205,22 @@ PnL segments use `/segment/{segmentId}`. Size segments use `/position-size-segme
 
 ### /segments/{segmentId}/bias-history
 ```json
-[
-  {
-    "segment": {"id": 9, "name": "Smart Money", "category": "pnl", "criteria": {"minPnl": 100000, "maxPnl": 1000000}},
-    "bias": [
-      {"timestamp": "2026-03-01T00:10:00.018Z", "bias": 0.42},
-      {"timestamp": "2026-03-01T02:10:00.132Z", "bias": 0.38}
-    ]
-  }
-]
+{
+  "segment": {"id": 9, "name": "Smart Money", "category": "pnl", "criteria": {"minPnl": 100000, "maxPnl": 1000000}},
+  "nextCursor": null,
+  "positionRecencyTimeframe": "all",
+  "start": "2026-03-03T08:10:00.099Z",
+  "end": "2026-03-04T08:10:00.099Z",
+  "pageStart": "2026-03-04T08:10:00.075Z",
+  "pageEnd": "2026-03-03T08:10:00.388Z",
+  "historySnapshotStructure": ["timestamp", "bias", "exposureRatio", "openValue", "openLongValue", "openShortValue", "activePerpEquity"],
+  "history": [
+    ["2026-03-04T08:10:00.075Z", 0.81, 2.95, 169578077.10, 108075482.73, 61502594.37, 57458083.37],
+    ["2026-03-04T06:10:00.019Z", 0.91, 3.02, 173871275.29, 113170965.45, 60700309.84, 57517772.99]
+  ]
+}
 ```
-Returns all 16 segments. Each has a `bias` array with ~6 data points over a 12-hour rolling window. Positive = net long, negative = net short.
+Returns data for the requested segment. The `history` array uses columnar format defined by `historySnapshotStructure`. Positive bias = net long, negative = net short. Call once per segment ID to get all 16 cohorts.
 
 ### /{segmentId}/assets/liquidation-risk
 ```json
@@ -183,31 +236,91 @@ Returns all 16 segments. Each has a `bias` array with ~6 data points over a 12-h
 ```json
 {
   "orders": [
-    {"coin": "BTC", "side": "B", "limitPx": 85000, "sz": 0.5, "orderType": "Limit", "address": "0x...", "oid": 756322353, "snapshotTs": "2026-03-01T10:35:00.000Z"}
+    {
+      "height": 922290820,
+      "address": "0xdef1...",
+      "oid": 756322353,
+      "coin": "BTC",
+      "side": "B",
+      "limitPx": 21500,
+      "sz": 0.00465,
+      "timestamp": "2023-07-18T10:30:51.626Z",
+      "triggerCondition": "N/A",
+      "isTrigger": false,
+      "triggerPx": 0,
+      "children": [],
+      "isPositionTpsl": false,
+      "reduceOnly": false,
+      "orderType": "Limit",
+      "origSz": 0,
+      "tif": "",
+      "cloid": "",
+      "status": "open",
+      "builder": "",
+      "builderFee": 0,
+      "untriggered": false,
+      "snapshotTs": "2026-03-13T09:40:00.000Z"
+    }
   ],
   "nextCursor": "eyJ..."
 }
 ```
 
-### Paginated response (positions, fills, etc.)
+### /positions/coins
+```json
+[
+  {"coin": "BTC", "totalValue": 2870625844.50, "totalValueLong": 1580344214.48, "totalValueShort": 1290281630.02, "count": 45230, "countLong": 24150, "countShort": 21080},
+  {"coin": "ETH", "totalValue": 1435312922.25, "totalValueLong": 790422107.24, "totalValueShort": 644890815.01, "count": 31450, "countLong": 17200, "countShort": 14250}
+]
+```
+Quick market-wide snapshot: total long/short values and position counts per coin.
+
+### /leaderboards/all-pnl
 ```json
 {
-  "data": [...],
-  "cursor": "eyJsYXN0SWQiOiAxMjM0NX0="
+  "totalCount": 150000,
+  "sumPnl": 45230000.50,
+  "assetsDistribution": [...],
+  "data": [
+    {"address": "0xabc1...", "age": 365, "totalValue": 5200000.00, "stableValue": 1200000.00, "topHolding": "BTC", "pnlAllTime": 15230000.50, "pnlMonth": 1230000.00, "pnlWeek": 450000.00, "pnlDay": 85000.00, "rank": 1, "profile": {...}}
+  ]
 }
 ```
-Pass `cursor` value as a query parameter on next request to get the next page. When `cursor` is `null`, you've reached the end.
+Broader than the perp-only leaderboard. Includes perps + spot + vaults PnL.
+
+### /builders/all-time-revenue
+```json
+{
+  "columns": ["revenue", "timestamp", "countUsers"],
+  "data": [
+    [1250.50, "2026-03-30T00:00:00.000Z", 342],
+    [1180.25, "2026-03-29T00:00:00.000Z", 328]
+  ]
+}
+```
+Daily revenue and user counts for all builders over time.
+
+### Paginated responses
+Paginated endpoints return results in a named array with a `nextCursor` field. The array key varies by endpoint (`positions`, `fills`, `orders`, `items`, etc.).
+```json
+{
+  "positions": [...],
+  "nextCursor": "eyJsYXN0SWQiOiAxMjM0NX0="
+}
+```
+Pass the `nextCursor` value as the `nextCursor` query parameter on the next request to get the next page. When `nextCursor` is `null`, you've reached the end.
 
 ---
 
 ## Rate Limits
 
-| Tier | Price | Requests | Rate Limit |
-|------|-------|----------|------------|
-| Free | $0 | 100/day | — |
-| Pulse | $179/mo | 50,000/mo | 12/min |
-| Flow | $1,159/mo | 200,000/mo | 25/min |
-| Stream | $2,399/mo | 1,000,000/mo | 100/min |
+| Tier | Price | Requests | Rate Limit | Webhooks | WebSocket |
+|------|-------|----------|------------|----------|-----------|
+| Free | $0 | 100/day | — | No | No |
+| Pulse | $179/mo | 50,000/mo | 60/min | No | No |
+| Surge | $399/mo | 150,000/mo | 100/min | No | No |
+| Flow | $799/mo | 400,000/mo | 200/min | Yes | No |
+| Stream | $1,999/mo | 2,000,000/mo | 500/min | Yes | Yes |
 
 **Note:** Some endpoints may support up to 200 requests/min. The rate limit counter on the API dashboard may not reflect per-endpoint limits.
 
@@ -250,14 +363,14 @@ params = {
 ### Cursor Pagination
 ```python
 cursor = None
-all_data = []
+all_positions = []
 while True:
     params = {"start": start, "end": end, "coin": "BTC"}
     if cursor:
-        params["cursor"] = cursor
+        params["nextCursor"] = cursor
     resp = requests.get(url + "/positions", headers=headers, params=params).json()
-    all_data.extend(resp["data"])
-    cursor = resp.get("cursor")
+    all_positions.extend(resp["positions"])
+    cursor = resp.get("nextCursor")
     if not cursor:
         break
 ```
@@ -281,6 +394,47 @@ for day_offset in range(5):
 def align_to_5min(dt):
     return dt.replace(minute=(dt.minute // 5) * 5, second=0, microsecond=0)
 ```
+
+### Reverse Lookup: Match a PnL share card to wallets
+
+A Hyperliquid PnL share card surfaces coin, side, leverage, entry price, mark price, and ROI. Reverse-lookup candidates like this:
+
+```python
+def find_positions_matching_card(coin, side, leverage, entry_price,
+                                  entry_tolerance=0.05, start="2026-01-01T00:00:00.000Z"):
+    matches = []
+    cursor = None
+    while True:
+        params = {"coin": coin, "open": True, "start": start, "limit": 500}
+        if cursor: params["nextCursor"] = cursor
+        r = requests.get(f"{BASE}/positions", headers=HEADERS, params=params).json()
+        for p in r["positions"]:
+            # side is lowercase string: "long" or "short"
+            if p["side"] != side.lower(): continue
+            lev = float(p.get("crossLeverage") or p.get("isolatedLeverage") or 0)
+            if abs(lev - leverage) > 0.5: continue
+            if abs(float(p["entryPrice"]) - entry_price) > entry_tolerance: continue
+            matches.append(p)
+        cursor = r.get("nextCursor")
+        if not cursor: break
+    return matches
+
+# Look up matched wallets for cohort context
+def lookup_wallet(address):
+    r = requests.get(f"{BASE}/wallets", headers=HEADERS, params={"address": address}).json()
+    return r["items"][0] if r.get("items") else None
+    # wallet["segments"] is an array of 2 IDs: one size cohort (1-7, 16), one PnL cohort (8-15)
+```
+
+**Match dimensions available on each position:** `side` (string: `"long"` or `"short"`), `crossLeverage`/`isolatedLeverage`, `entryPrice`, `size`, `openTime`, `unrealizedPnl`, `profile.segments` (array of 2 cohort IDs — one size-based, one PnL-based; see Cohort Segments table).
+
+**ROI from a card (short):** `(entry - mark) / entry * leverage * 100`. Long: flip the numerator. Use this to sanity-check a candidate, not to match on, since the card's mark price is frozen at share time.
+
+**Tolerances worth trying:** 0.05 (tight, Hyperliquid cards round to 2dp), 0.5 (loose, catches rounding), 1.0 (very loose, last resort).
+
+**Disambiguating multiple matches:** smallest `size` is often the share-card author (retail flex pattern), but not guaranteed. Consider surfacing all matches with size and open time rather than auto-picking. Use the card's `markPrice` as a tiebreaker: the candidate whose current API `markPrice` is closest to the card's mark is the strongest match, since mark prices vary by position (different mark sources at different timestamps).
+
+**Shortcut: cohort data is on the position itself.** Each position includes `profile.segments` (array of 2 cohort IDs). You can skip the `/wallets` lookup if you only need cohort classification. Use `/wallets` when you also want `totalEquity`, `perpPnl`, or `displayName`.
 
 ---
 
@@ -309,7 +463,7 @@ Endpoints: `/segments/{segmentId}/bias-history`, `/{segmentId}/assets/liquidatio
 Composite score from cohort sentiment, liquidation proximity, and OI trends. Display as a simple gauge with color-coded zones. One-page HTML.
 
 **"Show me what whales are doing vs retail on BTC"**
-Endpoints: `/position-metrics/coin/BTC/segment/9`, `/position-metrics/coin/BTC/position-size-segment/7`, `/position-metrics/coin/BTC/position-size-segment/16`
+Endpoints: `/position-metrics/coin/BTC/segment/9`, `/position-metrics/coin/BTC/segment/7`, `/position-metrics/coin/BTC/segment/16`
 Compare Leviathan (7) and Smart Money (9) positioning against Shrimp (16). Show who's long, who's short, and whether they agree.
 
 ### Dashboards
@@ -352,6 +506,28 @@ Rank by risk score, pull OI for top 5 riskiest, color-code severity, refresh eve
 Endpoints: `/leaderboards/perp-pnl?rankBy=pnlDay&limit=25`, `/wallets`
 Fetch leaderboard, look up wallets, poll for changes every 5 minutes.
 
+### Reverse Lookup
+
+**"Whose wallet is behind this Hyperliquid PnL share card?" / "Identify this trader" / "Who opened this position?"**
+Endpoints: `/positions?coin={coin}&open=true`, `/wallets?address={address}`
+A Hyperliquid share card or screenshot exposes: coin, side, leverage, entryPrice, markPrice, ROI%. If the user provides an image, extract these values from the card first. The first four are matchable against open positions; the mark on the card is frozen in time so re-derive the card's implied ROI from entry/mark instead of matching on mark directly. Pull open positions for the coin, filter by side and leverage (±0.5), rank candidates by entry-price proximity. Tighten to an exact entry match first; widen the tolerance if zero hits. Multiple matches are normal — share cards aren't unique. Look up the matched address via `GET /wallets?address={address}` for cohort segments, total equity, and PnL context.
+
+**"I only have the coin, side, and ROI — no entry price"**
+Endpoints: `/positions?coin={coin}&open=true`, `/wallets?address={address}`
+If entry price is missing, filter by coin + side + leverage only, then rank candidates by how closely their computed ROI matches the card's ROI. Short ROI: `(entry - mark) / entry * leverage * 100`. Long ROI: `(mark - entry) / entry * leverage * 100`. Current mark price from the API may differ from the card's mark, so this is a fuzzy match — present multiple candidates rather than picking one.
+
+**"The card doesn't match any currently open positions"**
+Endpoints: `/positions?coin={coin}&open=false&start=...`, `/coin/{coin}/open-positions/history`
+Card may represent a closed trade or an older snapshot. Query historical positions with `open=false` across a wider time window, or pull a historical open-positions snapshot from `/coin/{coin}/open-positions/history` and match against that instead. Entry price is still the strongest match dimension.
+
+**"Which cohort is behind a given share card?"**
+Endpoints: `/positions?coin={coin}&open=true`, `/wallets?address={address}`
+Match the card to candidate addresses as above, then look up each wallet via `/wallets?address={address}`. Each wallet has a `segments` array containing two IDs: one size-based cohort (IDs 1-7, 16) and one PnL-based cohort (IDs 8-15). Cross-reference with the Cohort Segments table above. If all candidates share a cohort, that's the answer. If they don't, the card is cohort-ambiguous — surface the distribution instead of picking one.
+
+**"Biggest money behind this trade idea, not the specific share card"**
+Endpoints: `/positions?coin={coin}&open=true`, `/position-metrics/coin/{coin}/segment/{segment}`
+Reframe the question: instead of finding the card's author, list all open positions matching the card's direction and leverage band, sorted by position size. Add cohort breakdown to show which segments are positioned this way.
+
 ### Backtesting
 
 **"Backtest: how did Smart Money positioning on BTC predict price moves over the last 4 weeks?"**
@@ -390,7 +566,9 @@ Endpoints: `/position-metrics/coin/{coin}/segment/9`, `/orders/5m-snapshots/late
 | Leaderboard error | `rankBy` must be `pnlAllTime`/`pnlMonth`/`pnlWeek`/`pnlDay`. `limit` must be 25/50/100. |
 | Empty cohort history | `/segments/{segmentId}/bias-history` has limited history. Use `/position-metrics/coin/{coin}/segment/{id}` for longer lookbacks (up to ~4 weeks). |
 | Stale data | Most data refreshes every ~5 minutes. State/summary updates may take up to 15-17 minutes. Wait for next cycle. |
-| No more pages | `cursor` is `null` in the response. You've fetched everything. |
+| No more pages | `nextCursor` is `null` in the response. You've fetched everything. |
+| Reverse lookup: no matches | Widen `entry_tolerance` (try 0.5 then 1.0). If still empty, the position may be closed — retry with `open=false`. For very old cards, use `/coin/{coin}/open-positions/history` for historical snapshots. |
+| Reverse lookup: too many matches | Narrow `entry_tolerance` to 0.05. Use ROI as a sanity check: compute each candidate's ROI and compare to the card's ROI. Candidates whose current `markPrice` is close to the card's mark are strongest. |
 
 ## Links
 
