@@ -93,7 +93,7 @@ All 16 cohorts (both PnL and size) use `/segment/{segmentId}`. A separate `/posi
 
 ### Positions & Market Exposure
 
-**GET /positions** — Historic positions. Params: `start` (required), `end`, `coin`, `segmentId` (filter by cohort ID), `address` (single address, e.g. `address=0x...`), `open`, `limit`, `nextCursor`. Historical from April 2025. Returns tens of thousands of positions per call with pre-computed data (PnL segments, size segments, leverage, liquidation progress, funding, entry price, unrealized PnL). Can also be used for reverse-lookups: given a coin, side, leverage, and entry price from a Hyperliquid PnL share card or screenshot, filter open positions to identify matching wallets (see Reverse Lookup prompts and code pattern below).
+**GET /positions** — Historic positions. Params: `start` (required), `end`, `coin`, `segmentId` (filter by cohort ID), `address` (one or more addresses, repeat the param for multiple, e.g. `address=0x...` or `address=0x...&address=0x...`), `open`, `limit`, `nextCursor`. Historical from April 2025. Returns tens of thousands of positions per call with pre-computed data (PnL segments, size segments, leverage, liquidation progress, funding, entry price, unrealized PnL). Can also be used for reverse-lookups: given a coin, side, leverage, and entry price from a Hyperliquid PnL share card or screenshot, filter open positions to identify matching wallets (see Reverse Lookup prompts and code pattern below).
 
 **GET /positions/coins** — Summary of position count by coin. Returns total long/short values and position counts per coin across the entire exchange. No parameters beyond auth. Use this for a quick market-wide snapshot of where capital is deployed.
 
