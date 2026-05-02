@@ -147,7 +147,7 @@ HyperTracker reconstructs full closed trades from raw Hyperliquid fills. Trade c
 
 **GET /closed-trades** — Closed trades for a wallet. Params: `address` (required), `startTime`, `endTime`, `limit`, `nextCursor`. Default time range: last 7 days when both omitted. **Param naming quirk:** uses `startTime`/`endTime` (NOT `start`/`end` like other historical endpoints).
 
-**GET /closed-trades/summary** — Aggregate summary for a wallet. Params: `address` (required). Returns `totalTrades`, `wins`, `losses`, `longTrades`, `shortTrades`, `avgDuration` (nanoseconds), `updatedAt`. Win rate = `wins / totalTrades`.
+**GET /closed-trades/summary** — Aggregate summary for a wallet. Params: `address` (required). Returns `totalTrades`, `wins`, `losses`, `longTrades`, `shortTrades`, `avgDuration` (milliseconds), `updatedAt`. Win rate = `wins / totalTrades`.
 
 **GET /closed-trades/{hash}** — A specific closed trade by hash. Params: `hash` (path).
 
@@ -340,7 +340,7 @@ Daily revenue and user counts for all builders over time.
   "nextCursor": "eyJjbG9zZVRpbWUiOjE3NzYyOTE0OTIwNTIsImlkIjoiMTQ2MDQ4MDEifQ..."
 }
 ```
-`duration` is in nanoseconds. `side` is `"long"` or `"short"`. `partial` indicates whether a trade was partially closed. Use `hash` to fetch the trade detail or its fills via `/closed-trades/{hash}` and `/closed-trades/{hash}/fills`.
+`duration` is in milliseconds. `side` is `"long"` or `"short"`. `partial` indicates whether a trade was partially closed. Use `hash` to fetch the trade detail or its fills via `/closed-trades/{hash}` and `/closed-trades/{hash}/fills`. Note: `id` is returned as a string in the list endpoint but as a number in the single-trade endpoint (`/closed-trades/{hash}`).
 
 ### /closed-trades/summary
 ```json
@@ -355,7 +355,7 @@ Daily revenue and user counts for all builders over time.
   "updatedAt": "2026-04-20T09:00:27.070Z"
 }
 ```
-Win rate is `wins / totalTrades`. `avgDuration` is in nanoseconds. `updatedAt` is `null` for wallets with no closed trades yet.
+Win rate is `wins / totalTrades`. `avgDuration` is in milliseconds. `updatedAt` is `null` for wallets with no closed trades yet.
 
 ### Paginated responses
 Paginated endpoints return results in a named array with a `nextCursor` field. The array key varies by endpoint (`positions`, `fills`, `orders`, `items`, etc.).
