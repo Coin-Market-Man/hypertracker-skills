@@ -27,7 +27,7 @@ All paths below are relative to this base URL. Full OpenAPI spec: `GET /api/exte
 5. **Leaderboard `rankBy`:** `pnlAllTime`, `pnlMonth`, `pnlWeek`, `pnlDay`. **`limit`:** `25`, `50`, `100`.
 6. **Default result count is 500** unless `limit` is specified. Paginate with `cursor` from the response.
 7. **Data refreshes every ~5 minutes** for most endpoints. State/summary updates may take up to 15-17 minutes. Plan polling accordingly.
-8. **REST only.** WebSocket and Webhook delivery are available on higher tiers as a custom package (not part of the standard API).
+8. **REST is the primary surface.** Webhooks are available on Flow and Stream. WebSocket is configured on request for Stream customers.
 
 ---
 
@@ -140,6 +140,18 @@ All 16 cohorts (both PnL and size) use `/segment/{segmentId}`. A separate `/posi
 ### Fills
 
 **GET /fills** — Trade executions. Params: `start` (required), `end` (same day), `coin` (array, e.g. `coin[]=BTC`), `limit`, `nextCursor`, `address`, `builder`, `side` (enum: `A` = sell/ask, `B` = buy/bid). 24hr max window. Historical from July 2025.
+
+### Closed Trades
+
+HyperTracker reconstructs full closed trades from raw Hyperliquid fills. Trade closures are detected within ~10 seconds of the final fill. History goes back to July 2025.
+
+**GET /closed-trades** — Closed trades for a wallet. Params: `address` (required), `startTime`, `endTime`, `limit`, `nextCursor`. Default time range: last 7 days when both omitted. **Param naming quirk:** uses `startTime`/`endTime` (NOT `start`/`end` like other historical endpoints).
+
+**GET /closed-trades/summary** — Aggregate summary for a wallet. Params: `address` (required). Returns `totalTrades`, `wins`, `losses`, `longTrades`, `shortTrades`, `avgDuration` (nanoseconds), `updatedAt`. Win rate = `wins / totalTrades`.
+
+**GET /closed-trades/{hash}** — A specific closed trade by hash. Params: `hash` (path).
+
+**GET /closed-trades/{hash}/fills** — Underlying fills for a specific closed trade. Params: `hash` (path), `startTime`, `endTime`, `limit`, `nextCursor`.
 
 ### Volume Metrics
 
@@ -300,6 +312,51 @@ Broader than the perp-only leaderboard. Includes perps + spot + vaults PnL.
 ```
 Daily revenue and user counts for all builders over time.
 
+### /closed-trades
+```json
+{
+  "trades": [
+    {
+      "address": "0x6c8512516ce5669d35113a11ca8b8de322fd84f6",
+      "hash": "bIUSUWzlZp01EToRyouN4yL9hPYAAAAAAN7aAQAAAZ2TOTDU",
+      "id": "14604801",
+      "side": "long",
+      "coin": "ETH",
+      "avgEntry": 2012.115,
+      "avgExit": 2373.060,
+      "duration": 5594052669,
+      "openTime": "2026-02-10T04:23:59.383Z",
+      "closeTime": "2026-04-15T22:18:12.052Z",
+      "partial": false,
+      "totalSize": 50000.0059,
+      "totalUsd": 100605773.22,
+      "realizedPnlUsd": 18596486.52,
+      "countFills": 12080,
+      "fee": 86246.79,
+      "feeUsd": 86246.79,
+      "fundingUsd": -635458.53
+    }
+  ],
+  "nextCursor": "eyJjbG9zZVRpbWUiOjE3NzYyOTE0OTIwNTIsImlkIjoiMTQ2MDQ4MDEifQ..."
+}
+```
+`duration` is in nanoseconds. `side` is `"long"` or `"short"`. `partial` indicates whether a trade was partially closed. Use `hash` to fetch the trade detail or its fills via `/closed-trades/{hash}` and `/closed-trades/{hash}/fills`.
+
+### /closed-trades/summary
+```json
+{
+  "address": "0xa5b0edf6b55128e0ddae8e51ac538c3188401d41",
+  "totalTrades": 8,
+  "wins": 7,
+  "losses": 1,
+  "avgDuration": 1913858487,
+  "longTrades": 7,
+  "shortTrades": 1,
+  "updatedAt": "2026-04-20T09:00:27.070Z"
+}
+```
+Win rate is `wins / totalTrades`. `avgDuration` is in nanoseconds. `updatedAt` is `null` for wallets with no closed trades yet.
+
 ### Paginated responses
 Paginated endpoints return results in a named array with a `nextCursor` field. The array key varies by endpoint (`positions`, `fills`, `orders`, `items`, etc.).
 ```json
@@ -320,9 +377,9 @@ Pass `nextCursor` value as `cursor` query parameter on the next request to get t
 | Pulse | $179/mo | 50,000/mo | 60/min | No | No |
 | Surge | $399/mo | 150,000/mo | 100/min | No | No |
 | Flow | $799/mo | 400,000/mo | 200/min | Yes | No |
-| Stream | $1,999/mo | 2,000,000/mo | 500/min | Yes | Yes |
+| Stream | $1,999/mo | 2,000,000/mo | 500/min | Yes | On request |
 
-**Note:** Some endpoints may support up to 200 requests/min. The rate limit counter on the API dashboard may not reflect per-endpoint limits.
+**Note:** WebSocket access on the Stream tier is configured on request rather than self-serve. Reach out via support to scope the streams you need. Some endpoints may support up to 200 requests/min. The rate limit counter on the API dashboard may not reflect per-endpoint limits.
 
 ---
 
@@ -465,6 +522,20 @@ Rank by risk score, pull OI for top 5 riskiest, color-code severity, refresh eve
 Endpoints: `/leaderboards/perp-pnl?rankBy=pnlDay&limit=25`, `/wallets`
 Fetch leaderboard, look up wallets, poll for changes every 5 minutes.
 
+### Closed Trades
+
+**"Pull this wallet's full closed trade history and compute their win rate and average hold."**
+Endpoints: `/closed-trades/summary?address={address}`, `/closed-trades?address={address}`
+Hit `/summary` first for `wins`, `losses`, `totalTrades`, `avgDuration`. Use `/closed-trades` to paginate through individual trades when you need per-trade breakdown (entry, exit, realized PnL, fills count). Default window is 7 days. Use `startTime`/`endTime` (not `start`/`end`) to widen.
+
+**"Show me the most profitable closed trades on Hyperliquid this month, by wallet."**
+Endpoints: `/leaderboards/perp-pnl?rankBy=pnlMonth&limit=25`, `/closed-trades/summary?address={address}` (per leader), `/closed-trades?address={address}&startTime=...`
+Top monthly leaderboard gives candidates; pull each one's summary, then their largest trades by `realizedPnlUsd` for the month.
+
+**"Build a copy-trading feed from a wallet's closed trades."**
+Endpoints: `/closed-trades?address={address}`, `/closed-trades/{hash}/fills`
+Poll closed-trades for a watched wallet on a cadence (every few minutes). When a new trade hash appears, optionally pull `/closed-trades/{hash}/fills` for the underlying execution detail (slippage, partial fills, builder).
+
 ### Backtesting
 
 **"Backtest: how did Smart Money positioning on BTC predict price moves over the last 4 weeks?"**
@@ -504,6 +575,7 @@ Endpoints: `/position-metrics/coin/{coin}/segment/9`, `/orders/5m-snapshots/late
 | Empty cohort history | `/segments/{segmentId}/bias-history` has limited history. Use `/position-metrics/coin/{coin}/segment/{id}` for longer lookbacks (up to ~4 weeks). |
 | Stale data | Most data refreshes every ~5 minutes. State/summary updates may take up to 15-17 minutes. Wait for next cycle. |
 | No more pages | `cursor` is `null` in the response. You've fetched everything. |
+| Closed trades empty | Default time range is 7 days when neither `startTime` nor `endTime` is set. Widen the window or set both. **Param naming gotcha:** closed-trades uses `startTime`/`endTime`, not `start`/`end` like other historical endpoints. |
 
 ## Links
 
