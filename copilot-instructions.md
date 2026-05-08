@@ -27,7 +27,7 @@ All paths below are relative to this base URL. Full OpenAPI spec: `GET /api/exte
 5. **Leaderboard `rankBy`:** `pnlAllTime`, `pnlMonth`, `pnlWeek`, `pnlDay`. **`limit`:** `25`, `50`, `100`.
 6. **Default result count is 500** unless `limit` is specified. Paginate with `cursor` from the response.
 7. **Data refreshes every ~5 minutes** for most endpoints. State/summary updates may take up to 15-17 minutes. Plan polling accordingly.
-8. **REST is the primary surface.** Webhooks are available on Flow and Stream. WebSocket is configured on request for Stream customers.
+8. **REST + Webhooks.** REST endpoints are the primary surface across all tiers. Webhooks are available on Flow and Stream tiers for push-based state notifications.
 
 ---
 
@@ -371,15 +371,15 @@ Pass `nextCursor` value as `cursor` query parameter on the next request to get t
 
 ## Rate Limits
 
-| Tier | Price | Requests | Rate Limit | Webhooks | WebSocket |
-|------|-------|----------|------------|----------|-----------|
-| Free | $0 | 100/day | — | No | No |
-| Pulse | $179/mo | 50,000/mo | 60/min | No | No |
-| Surge | $399/mo | 150,000/mo | 100/min | No | No |
-| Flow | $799/mo | 400,000/mo | 200/min | Yes | No |
-| Stream | $1,999/mo | 2,000,000/mo | 500/min | Yes | On request |
+| Tier | Price | Requests | Rate Limit | Webhooks |
+|------|-------|----------|------------|----------|
+| Free | $0 | 100/day | — | No |
+| Pulse | $179/mo | 50,000/mo | 60/min | No |
+| Surge | $399/mo | 150,000/mo | 100/min | No |
+| Flow | $799/mo | 400,000/mo | 200/min | Yes |
+| Stream | $1,999/mo | 2,000,000/mo | 500/min | Yes |
 
-**Note:** WebSocket access on the Stream tier is configured on request rather than self-serve. Reach out via support to scope the streams you need. Some endpoints may support up to 200 requests/min. The rate limit counter on the API dashboard may not reflect per-endpoint limits.
+**Note:** Some endpoints may support up to 200 requests/min. The rate limit counter on the API dashboard may not reflect per-endpoint limits.
 
 ---
 
