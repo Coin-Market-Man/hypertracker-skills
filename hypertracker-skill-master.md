@@ -27,7 +27,7 @@ All paths below are relative to this base URL. Full OpenAPI spec: `GET /api/exte
 5. **Leaderboard `rankBy`:** `pnlAllTime`, `pnlMonth`, `pnlWeek`, `pnlDay`. **`limit`:** `25`, `50`, `100`.
 6. **Default result count is 500** unless `limit` is specified. Paginate with `cursor` from the response.
 7. **Data refreshes every ~5 minutes** for most endpoints. State/summary updates may take up to 15-17 minutes. Plan polling accordingly.
-8. **REST + Webhooks.** REST endpoints are the primary surface across all tiers. Webhooks are available on Flow and Stream tiers for push-based state notifications.
+8. **REST only.** REST endpoints are the surface across all tiers.
 
 ---
 
@@ -143,15 +143,15 @@ All 16 cohorts (both PnL and size) use `/segment/{segmentId}`. A separate `/posi
 
 ### Closed Trades
 
-HyperTracker reconstructs full closed trades from raw Hyperliquid fills. Trade closures are detected within ~10 seconds of the final fill. History goes back to July 2025.
+HyperTracker reconstructs full closed trades from raw Hyperliquid fills. History goes back to July 2025.
 
 **GET /closed-trades** — Closed trades for a wallet. Params: `address` (required), `startTime`, `endTime`, `limit`, `nextCursor`. Default time range: last 7 days when both omitted. **Param naming quirk:** uses `startTime`/`endTime` (NOT `start`/`end` like other historical endpoints).
 
 **GET /closed-trades/summary** — Aggregate summary for a wallet. Params: `address` (required). Returns `totalTrades`, `wins`, `losses`, `longTrades`, `shortTrades`, `avgDuration` (milliseconds), `updatedAt`. Win rate = `wins / totalTrades`.
 
-**GET /closed-trades/{hash}** — A specific closed trade by hash. Params: `hash` (path).
+**GET /closed-trades/{hash}** — A specific closed trade by hash. Params: `hash` (required).
 
-**GET /closed-trades/{hash}/fills** — Underlying fills for a specific closed trade. Params: `hash` (path), `startTime`, `endTime`, `limit`, `nextCursor`.
+**GET /closed-trades/{hash}/fills** — Underlying fills for a specific closed trade. Params: `hash` (required), `startTime`, `endTime`, `limit`, `nextCursor`.
 
 ### Volume Metrics
 
@@ -371,13 +371,13 @@ Pass `nextCursor` value as `cursor` query parameter on the next request to get t
 
 ## Rate Limits
 
-| Tier | Price | Requests | Rate Limit | Webhooks |
-|------|-------|----------|------------|----------|
-| Free | $0 | 100/day | — | No |
-| Pulse | $179/mo | 50,000/mo | 60/min | No |
-| Surge | $399/mo | 150,000/mo | 100/min | No |
-| Flow | $799/mo | 400,000/mo | 200/min | Yes |
-| Stream | $1,999/mo | 2,000,000/mo | 500/min | Yes |
+| Tier | Price | Requests | Rate Limit |
+|------|-------|----------|------------|
+| Free | $0 | 100/day | — |
+| Pulse | $179/mo | 50,000/mo | 60/min |
+| Surge | $399/mo | 150,000/mo | 100/min |
+| Flow | $799/mo | 400,000/mo | 200/min |
+| Stream | $1,999/mo | 2,000,000/mo | 500/min |
 
 **Note:** Some endpoints may support up to 200 requests/min. The rate limit counter on the API dashboard may not reflect per-endpoint limits.
 
