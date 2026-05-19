@@ -16,7 +16,7 @@ Get your token: https://app.coinmarketman.com/hypertracker/api-dashboard?utm_sou
 https://ht-api.coinmarketman.com/api/external
 ```
 
-All paths below are relative to this base URL. Full OpenAPI spec: `GET /api/external-json`.
+All paths below are relative to this base URL.
 
 ## Critical Rules
 
@@ -87,7 +87,7 @@ All 16 cohorts (both PnL and size) use `/segment/{segmentId}`. A separate `/posi
 
 **GET /segments** — All 16 cohort definitions with IDs and names. Call first to confirm segment IDs.
 
-**GET /segments/{segmentId}/bias-history** — Bias history for a specific cohort. Negative = net short, positive = net long. Params: `segmentId` (path), `limit`, `nextCursor`, `start`, `end`, `positionRecencyTimeframe` (enum: `24h`, `7d`, `30d`, `all`; default: `all`). To get all cohorts, call once per segment ID.
+**GET /segments/{segmentId}/bias-history** — Bias history for a specific cohort, exchange-wide across all coins. Returns columnar `history` array (column order in `historySnapshotStructure`). Bias is signed: positive = net long, negative = net short, with magnitude that factors in exposure ratio (can exceed 1). Different scale from per-coin `bias` in `/positions/heatmap` — the two are not directly comparable. Params: `segmentId` (path), `limit`, `nextCursor`, `start`, `end`, `positionRecencyTimeframe` (enum: `24h`, `7d`, `30d`, `all`; default: `all`). Note: `start` is required when `limit`, `end`, or `nextCursor` is set, otherwise returns 400 with message `"'start' query param is required for 'end', 'nextCursor' and 'limit' query params"`. To get all cohorts, call once per segment ID.
 
 **GET /segments/{segmentId}/summary** — Per-segment summary: trader counts, aggregate positioning, top 10 open perps. Params: `segmentId` (path), `positionAge` (enum: `all`, `24h`, `7d`, `30d`; default: `all` — filter positions by age).
 
@@ -95,7 +95,7 @@ All 16 cohorts (both PnL and size) use `/segment/{segmentId}`. A separate `/posi
 
 **GET /positions** — Historic positions. Params: `start` (required), `end`, `coin`, `segmentId` (filter by cohort ID), `address` (one or more addresses, repeat the param for multiple, e.g. `address=0x...` or `address=0x...&address=0x...`), `open`, `limit`, `nextCursor`. Historical from April 2025. Returns tens of thousands of positions per call with pre-computed data (PnL segments, size segments, leverage, liquidation progress, funding, entry price, unrealized PnL). Can also be used for reverse-lookups: given a coin, side, leverage, and entry price from a Hyperliquid PnL share card or screenshot, filter open positions to identify matching wallets (see Reverse Lookup prompts and code pattern below).
 
-**GET /positions/coins** — Summary of position count by coin. Returns total long/short values and position counts per coin across the entire exchange. No parameters beyond auth. Use this for a quick market-wide snapshot of where capital is deployed.
+**GET /positions/coins** — Summary of position count by coin. Returns total long/short values and position counts per coin across the entire exchange. No parameters beyond auth. Use this for a quick market-wide snapshot of where capital is deployed. Note: `totalValueLong` always equals `totalValueShort` at this coin-aggregate level — that is correct perp math (every long contract has a matched short counterparty), not a broken field. Use `countLong` / `countShort` for crowding analysis; use per-cohort data from `/positions/heatmap` for directional notional.
 
 **GET /positions/metrics** — Metrics for specific positions by ID. Params: `ids` (required, array, max 50 position IDs — 64-char hex), `start`, `end`, `limit`, `nextCursor`. Returns liquidation price, mark price, position value, and unrealized PnL over time.
 
@@ -113,7 +113,7 @@ All 16 cohorts (both PnL and size) use `/segment/{segmentId}`. A separate `/posi
 
 ### Order Flow
 
-**GET /orders/5m-snapshots/latest** — Most recent snapshot of every open order. Params: `coin`, `limit`, `nextCursor`, `address`, `oid`, `orderType`. orderType enum: `Limit`, `Stop Limit`, `Stop Market`, `Take Profit Limit`, `Take Profit Market`.
+**GET /orders/5m-snapshots/latest** — Most recent snapshot of every open order. Params: `coin`, `limit`, `nextCursor`, `address`, `oid`, `orderType`, `start`, `end`. orderType enum: `Limit`, `Stop Limit`, `Stop Market`, `Take Profit Limit`, `Take Profit Market`. Default ordering returns the oldest open orders first — pages of GTC limits and triggers from 2023 and 2024 that have never been filled. To get fresh order flow only, pass `start` set to a recent ISO 8601 timestamp (e.g. 24 hours ago). The `start` filter applies to each order's `timestamp` (placed-at time), not to `snapshotTs`.
 
 **GET /orders/5m-snapshots/{snapshotTime}** — Historical snapshot at a specific time. Params: `snapshotTime` (path, must be 5-min boundary, after floor date), `coin`, `limit`, `nextCursor`, `address`, `oid`, `start`, `end`, `orderType`.
 
@@ -127,7 +127,7 @@ All 16 cohorts (both PnL and size) use `/segment/{segmentId}`. A separate `/posi
 
 **GET /{segmentId}/assets/liquidation-risk** — Per-asset liquidation risk for a specific cohort. Params: `segmentId` (path), `offset`, `limit`. Returns risk scores, at-risk OI, directional skew.
 
-**GET /positions/heatmap** — Liquidation clusters across price levels. Params: `openedWithin` (enum: `24h`, `7d`, `30d`, `all`; default: `all`). Current snapshot only, no history.
+**GET /positions/heatmap** — Per-coin per-cohort positioning across the entire exchange. Returns one entry per coin (~335 coins as of 2026-05) with a `segments` array of 16 rows (one per cohort) containing `segmentId`, `totalValue`, `totalLongValue`, `totalShortValue`, `count`, `countLong`, `countShort`, and `bias`. The per-cohort `bias` is a long-fraction ratio bounded `[0, 1]` (formula: `totalLongValue / (totalLongValue + totalShortValue)`, `0.5 = neutral`, `> 0.5 = net long`, `< 0.5 = net short`). This is per-coin per-cohort positioning — different mathematical quantity and different scale from the signed exchange-wide bias returned by `/segments/{id}/bias-history`. Params: `openedWithin` (enum: `24h`, `7d`, `30d`, `all`; default: `all`). Current snapshot only, no history. Response is ~930 KB unfiltered, which can exceed response size limits in some environments (e.g. ChatGPT Custom GPT Actions); if so, use `/position-metrics/coin/{coin}/segment/{segmentId}` per cohort as a fallback and compute `bias = totalPositionValueLong / totalPositionValue` to get the equivalent per-cohort number. The `coin` query parameter is silently ignored — filter client-side after fetching.
 
 ### Leaderboards
 
@@ -232,7 +232,7 @@ Manage your tracked address list. Useful for building custom watchlists and aler
   ]
 }
 ```
-Returns data for the requested segment. The `history` array uses columnar format defined by `historySnapshotStructure`. Positive bias = net long, negative = net short. Call once per segment ID to get all 16 cohorts.
+Returns data for the requested segment. The `history` array uses columnar format defined by `historySnapshotStructure`. Bias is signed and exchange-wide (positive = net long, negative = net short), with magnitude that factors in exposure ratio — different scale from per-coin `bias` in `/positions/heatmap`. Call once per segment ID to get all 16 cohorts.
 
 ### /{segmentId}/assets/liquidation-risk
 ```json
@@ -281,11 +281,11 @@ Returns data for the requested segment. The `history` array uses columnar format
 ### /positions/coins
 ```json
 [
-  {"coin": "BTC", "totalValue": 2870625844.50, "totalValueLong": 1580344214.48, "totalValueShort": 1290281630.02, "count": 45230, "countLong": 24150, "countShort": 21080},
-  {"coin": "ETH", "totalValue": 1435312922.25, "totalValueLong": 790422107.24, "totalValueShort": 644890815.01, "count": 31450, "countLong": 17200, "countShort": 14250}
+  {"coin": "BTC", "totalValue": 2107846156.36, "totalValueLong": 1053923078.18, "totalValueShort": 1053923078.18, "count": 29758, "countLong": 16623, "countShort": 13135},
+  {"coin": "ETH", "totalValue": 1148466271.07, "totalValueLong": 574233135.54, "totalValueShort": 574233135.54, "count": 14930, "countLong": 8666, "countShort": 6264}
 ]
 ```
-Quick market-wide snapshot: total long/short values and position counts per coin.
+Quick market-wide snapshot: total long/short values and position counts per coin. `totalValueLong` and `totalValueShort` are always equal at this aggregate level (correct perp math: every long is matched by a short). Use `countLong` / `countShort` for crowding analysis.
 
 ### /leaderboards/all-pnl
 ```json
@@ -646,4 +646,3 @@ Endpoints: `/position-metrics/coin/{coin}/segment/9`, `/orders/5m-snapshots/late
 
 - Dashboard & API Key: https://app.coinmarketman.com/hypertracker/api-dashboard?utm_source=skill&utm_medium=ai&utm_campaign=skill-launch
 - Docs: https://docs.coinmarketman.com
-- OpenAPI Spec: `GET /api/external-json`
