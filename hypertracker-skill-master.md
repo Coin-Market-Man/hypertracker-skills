@@ -87,7 +87,7 @@ All 16 cohorts (both PnL and size) use `/segment/{segmentId}`. A separate `/posi
 
 **GET /segments** — All 16 cohort definitions with IDs and names. Call first to confirm segment IDs.
 
-**GET /segments/{segmentId}/bias-history** — Bias history for a specific cohort, exchange-wide across all coins. Returns columnar `history` array (column order in `historySnapshotStructure`). Bias is signed: positive = net long, negative = net short, with magnitude that factors in exposure ratio (can exceed 1). Different scale from per-coin `bias` in `/positions/heatmap` — the two are not directly comparable. Params: `segmentId` (path), `limit`, `nextCursor`, `start`, `end`, `positionRecencyTimeframe` (enum: `24h`, `7d`, `30d`, `all`; default: `all`). Note: `start` is required when `limit`, `end`, or `nextCursor` is set, otherwise returns 400 with message `"'start' query param is required for 'end', 'nextCursor' and 'limit' query params"`. To get all cohorts, call once per segment ID.
+**GET /segments/{segmentId}/bias-history** — Bias history for a specific cohort, exchange-wide across all coins. The `history` field is an array of arrays. Each row's column order matches `historySnapshotStructure` (i.e. `[timestamp, bias, exposureRatio, openValue, openLongValue, openShortValue, activePerpEquity]`). Bias is signed: positive = net long, negative = net short, with magnitude that factors in exposure ratio (can exceed 1). Different scale from per-coin `bias` in `/positions/heatmap` — the two are not directly comparable. Params: `segmentId` (path), `limit` (max 1000), `nextCursor`, `start`, `end`, `positionRecencyTimeframe` (enum: `24h`, `7d`, `30d`, `all`; default: `all`). Note: `start` is required when `limit`, `end`, or `nextCursor` is set, otherwise returns 400 with message `"'start' query param is required for 'end', 'nextCursor' and 'limit' query params"`. To get all cohorts, call once per segment ID.
 
 **GET /segments/{segmentId}/summary** — Per-segment summary: trader counts, aggregate positioning, top 10 open perps. Params: `segmentId` (path), `positionAge` (enum: `all`, `24h`, `7d`, `30d`; default: `all` — filter positions by age).
 
@@ -232,7 +232,7 @@ Manage your tracked address list. Useful for building custom watchlists and aler
   ]
 }
 ```
-Returns data for the requested segment. The `history` array uses columnar format defined by `historySnapshotStructure`. Bias is signed and exchange-wide (positive = net long, negative = net short), with magnitude that factors in exposure ratio — different scale from per-coin `bias` in `/positions/heatmap`. Call once per segment ID to get all 16 cohorts.
+Returns data for the requested segment. The `history` field is an array of arrays, with column order defined by `historySnapshotStructure`. Bias is signed and exchange-wide (positive = net long, negative = net short), with magnitude that factors in exposure ratio — different scale from per-coin `bias` in `/positions/heatmap`. Call once per segment ID to get all 16 cohorts.
 
 ### /{segmentId}/assets/liquidation-risk
 ```json
@@ -285,7 +285,7 @@ Returns data for the requested segment. The `history` array uses columnar format
   {"coin": "ETH", "totalValue": 1148466271.07, "totalValueLong": 574233135.54, "totalValueShort": 574233135.54, "count": 14930, "countLong": 8666, "countShort": 6264}
 ]
 ```
-Quick market-wide snapshot: total long/short values and position counts per coin. `totalValueLong` and `totalValueShort` are always equal at this aggregate level (correct perp math: every long is matched by a short). Use `countLong` / `countShort` for crowding analysis.
+Quick market-wide snapshot: total long/short values and position counts per coin.
 
 ### /leaderboards/all-pnl
 ```json
