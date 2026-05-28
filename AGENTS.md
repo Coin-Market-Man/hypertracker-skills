@@ -147,7 +147,7 @@ HyperTracker reconstructs full closed trades from raw Hyperliquid fills. History
 
 **GET /closed-trades** — Closed trades for a wallet. Params: `address` (required), `startTime`, `endTime`, `limit`, `nextCursor`. Default time range: last 7 days when both omitted. **Param naming quirk:** uses `startTime`/`endTime` (NOT `start`/`end` like other historical endpoints).
 
-**GET /closed-trades/summary** — Aggregate summary for a wallet. Params: `address` (required). Returns `totalTrades`, `wins`, `losses`, `longTrades`, `shortTrades`, `avgDuration` (milliseconds), `updatedAt`. Win rate = `wins / totalTrades`.
+**GET /closed-trades/summary** — Full aggregate analytics for a wallet's closed trades, both overall and broken down by coin. Params: `address` (required). Top level returns `address`, `range` (currently always `allTime`), `updatedAt`, a `summary` object (wallet-wide metrics), and a `coins` array (the same metrics per asset). Metrics in both `summary` and each `coins[]` entry: trade counts (`totalTrades`, `wins`, `losses`, `longTrades`, `shortTrades`), `winRate` (0-1 float), durations (`avgDuration`, `medianDuration`, milliseconds), PnL aggregates (`totalWinningPnl`, `totalLosingPnl`, `netPnl`), gain/loss stats (`avgGain`, `avgLoss`, `medianGain`, `medianLoss`), trade-quality metrics (`profitFactor`, `payoffRatio`, `expectancy`, `expectancyPct`), and size/cost stats (`avgTradeSize`, `medianSizeUsd`, `totalFeesPaid`, `totalVolumeUsd`). Each `coins[]` entry also has `volumeSharePct` (the coin's share of the wallet's total volume). Use the per-coin breakdown to find wallets that are specialists on a given asset versus generalists.
 
 **GET /closed-trades/{hash}** — A specific closed trade by hash. Params: `hash` (required).
 
@@ -346,16 +346,65 @@ Daily revenue and user counts for all builders over time.
 ```json
 {
   "address": "0xa5b0edf6b55128e0ddae8e51ac538c3188401d41",
-  "totalTrades": 8,
-  "wins": 7,
-  "losses": 1,
-  "avgDuration": 1913858487,
-  "longTrades": 7,
-  "shortTrades": 1,
-  "updatedAt": "2026-04-20T09:00:27.070Z"
+  "range": "allTime",
+  "updatedAt": "2026-05-28T13:51:17.145Z",
+  "summary": {
+    "totalTrades": 300,
+    "wins": 206,
+    "losses": 94,
+    "winRate": 0.6867,
+    "longTrades": 289,
+    "shortTrades": 11,
+    "avgDuration": 78823930,
+    "medianDuration": 43200000,
+    "totalWinningPnl": 1250000.45,
+    "totalLosingPnl": -420000.12,
+    "netPnl": 830000.33,
+    "avgGain": 6067.96,
+    "avgLoss": -4468.09,
+    "medianGain": 4200.5,
+    "medianLoss": -3100.75,
+    "profitFactor": 2.98,
+    "payoffRatio": 1.36,
+    "expectancy": 2766.67,
+    "expectancyPct": 0.0325,
+    "totalFeesPaid": 12345.67,
+    "avgTradeSize": 85000.25,
+    "medianSizeUsd": 79000.5,
+    "totalVolumeUsd": 12345678.9
+  },
+  "coins": [
+    {
+      "coin": "BTC",
+      "totalTrades": 42,
+      "wins": 29,
+      "losses": 13,
+      "winRate": 0.6905,
+      "longTrades": 21,
+      "shortTrades": 21,
+      "avgDuration": 43200000,
+      "medianDuration": 36000000,
+      "totalWinningPnl": 320000.45,
+      "totalLosingPnl": -95000.12,
+      "netPnl": 225000.33,
+      "avgGain": 11034.5,
+      "avgLoss": -7307.7,
+      "medianGain": 8200.25,
+      "medianLoss": -5200.5,
+      "profitFactor": 3.37,
+      "payoffRatio": 1.51,
+      "expectancy": 5357.15,
+      "expectancyPct": 0.0429,
+      "totalFeesPaid": 4567.89,
+      "avgTradeSize": 125000.75,
+      "medianSizeUsd": 118000.25,
+      "totalVolumeUsd": 3456789.12,
+      "volumeSharePct": 0.28
+    }
+  ]
 }
 ```
-Win rate is `wins / totalTrades`. `avgDuration` is in milliseconds. `updatedAt` is `null` for wallets with no closed trades yet.
+`summary` covers all closed trades for the wallet; `coins[]` breaks the same metrics out per asset, sorted by volume share. The top-level `range` field is currently always `allTime`. `winRate` is a 0-1 float (multiply by 100 for a percentage). Durations are milliseconds. Formulas verified against prod: `profitFactor = totalWinningPnl / abs(totalLosingPnl)`, `payoffRatio = avgGain / abs(avgLoss)`, `expectancy = netPnl / totalTrades` (average dollar PnL per trade), `expectancyPct = expectancy / avgTradeSize`, `volumeSharePct = coin totalVolumeUsd / summary totalVolumeUsd`. `updatedAt` is `null` for wallets with no closed trades yet.
 
 ### Paginated responses
 Paginated endpoints return results in a named array with a `nextCursor` field. The array key varies by endpoint (`positions`, `fills`, `orders`, `items`, etc.).
@@ -563,11 +612,11 @@ Rank by risk score, pull OI for top 5 riskiest, color-code severity, refresh eve
 Endpoints: `/leaderboards/perp-pnl?rankBy=pnlDay&limit=25`, `/wallets`
 Fetch leaderboard, look up wallets, poll for changes every 5 minutes.
 
-### Closed Trades
+### Closed Trades — Basic Queries
 
 **"Pull this wallet's full closed trade history and compute their win rate and average hold."**
 Endpoints: `/closed-trades/summary?address={address}`, `/closed-trades?address={address}`
-Hit `/summary` first for `wins`, `losses`, `totalTrades`, `avgDuration`. Use `/closed-trades` to paginate through individual trades when you need per-trade breakdown (entry, exit, realized PnL, fills count). Default window is 7 days. Use `startTime`/`endTime` (not `start`/`end`) to widen.
+Hit `/summary` first for `winRate`, `wins`, `losses`, `totalTrades`, `avgDuration`, `profitFactor`, `expectancy`. Use `/closed-trades` to paginate through individual trades when you need per-trade breakdown (entry, exit, realized PnL, fills count). Default window is 7 days. Use `startTime`/`endTime` (not `start`/`end`) to widen.
 
 **"Show me the most profitable closed trades on Hyperliquid this month, by wallet."**
 Endpoints: `/leaderboards/perp-pnl?rankBy=pnlMonth&limit=25`, `/closed-trades/summary?address={address}` (per leader), `/closed-trades?address={address}&startTime=...`
@@ -576,6 +625,22 @@ Top monthly leaderboard gives candidates; pull each one's summary, then their la
 **"Build a copy-trading feed from a wallet's closed trades."**
 Endpoints: `/closed-trades?address={address}`, `/closed-trades/{hash}/fills`
 Poll closed-trades for a watched wallet on a cadence (every few minutes). When a new trade hash appears, optionally pull `/closed-trades/{hash}/fills` for the underlying execution detail (slippage, partial fills, builder).
+
+### Closed Trades — Wallet Discovery
+
+The per-coin breakdown in `/closed-trades/summary` (the `coins[]` array) turns the endpoint into a wallet-discovery engine. Each coin entry carries its own `winRate`, `profitFactor`, `expectancy`, and `netPnl`, so you can find traders who are genuinely good on a specific asset rather than wallets that got lucky once.
+
+**"Find the best [COIN] traders on Hyperliquid"**
+Endpoints: `/leaderboards/perp-pnl?rankBy=pnlMonth&limit=100`, `/closed-trades/summary?address={address}` (per leader)
+Pull the top 100 monthly PnL wallets. For each, fetch the closed-trades summary and find the entry in `coins[]` for the target coin. Filter to specialists: `totalTrades > 20` (sample size), `winRate > 0.6`, `profitFactor > 2`, `expectancyPct > 0.02`. Rank survivors by per-coin `expectancy` (dollar edge per trade) or `netPnl` (total proven dollars on the coin). Return the top wallets with address, win rate, profit factor, net PnL, and trade count on that coin. Cross-reference cohort via `/wallets?address={address}` for PnL/size segment context.
+
+**"Build a copy-trade watchlist for [COIN]"**
+Endpoints: `/leaderboards/perp-pnl?rankBy=pnlMonth&limit=100`, `/closed-trades/summary?address={address}`, `/closed-trades?address={address}` (per wallet)
+Use the specialist filter above (per-coin `totalTrades > 30`, `winRate > 0.6`, `profitFactor > 2.5`) to assemble 5-10 candidate wallets. Save the addresses. Poll `/closed-trades?address={each}` on a cadence, detect new trade hashes by diffing against the previous poll. When a new trade appears for the target coin, surface it with the wallet's per-coin stats (so the user knows the specialist's track record) plus the trade detail. Optionally pull `/closed-trades/{hash}/fills` for execution detail.
+
+**"Find high-volume wallets with a losing track record to fade"**
+Endpoints: `/leaderboards/perp-pnl?rankBy=pnlMonth&limit=100`, `/closed-trades/summary?address={address}` (per leader), `/positions?address={address}&open=true`
+Inverse of specialist discovery. Pull a wide candidate set, fetch each summary, and filter to `totalTrades > 100`, `winRate < 0.4`, `profitFactor < 0.8`, `totalVolumeUsd > 10000000`. These are high-frequency unprofitable wallets whose positions can act as contrarian indicators. Cross-reference cohort: most fall into Exit Liquidity (12), Full Rekt (14), or Giga-Rekt (15). Return them as a fade list alongside their current open positions.
 
 ### Reverse Lookup
 
