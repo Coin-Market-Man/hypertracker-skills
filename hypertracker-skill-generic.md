@@ -624,6 +624,42 @@ Pull all four data sources. Classify as risk-on, risk-off, or neutral. Show the 
 **"Coin screener ranking assets by smart money conviction, order flow health, and liquidation risk"**
 Endpoints: `/position-metrics/coin/{coin}/segment/9`, `/orders/5m-snapshots/latest`, `/{segmentId}/assets/liquidation-risk`, `/state/summary`
 
+### Use Case Recipes
+
+Larger end-to-end workflows. Each lists the exact endpoints to call and how to combine them. All endpoints verified against prod.
+
+**"Give me a 60-second morning market brief on Hyperliquid"**
+Endpoints: `/positions/heatmap`, `/position-metrics/general?start={24h ago}&end={now}`, `/leaderboards/perp-pnl?rankBy=pnlDay&limit=25`, `/orders/5m-snapshots/latest?coin=BTC&start={24h ago}`
+Pull per-cohort positioning from the heatmap (which cohorts lean long vs short on the major coins), market health from `/position-metrics/general` (long/short ratio, OI, position count), today's top performers from the leaderboard, and BTC stop/TP clusters from the order snapshot (pass `start` to avoid stale 2023-2024 orders). Summarize in plain English: market mood, what smart money cohorts are doing, what today's winners are positioned in, and where BTC order-flow tension is building.
+
+**"What are today's top-earning traders doing differently from everyone else?"**
+Endpoints: `/leaderboards/perp-pnl?rankBy=pnlDay&limit=100`, `/positions/heatmap`, `/position-metrics/general?start={ISO}&end={now}`
+Pull the top 100 daily PnL wallets. Compute what fraction are net profitable and the median daily PnL. Compare their weekly vs monthly ranks to separate consistent winners from one-day luck. Cross-reference the heatmap to see whether the strong cohorts (Money Printer 8, Smart Money 9) are aligned with or against where the leaderboard is positioned. `rankBy` options: `pnlAllTime`, `pnlMonth`, `pnlWeek`, `pnlDay`; `limit` must be 25, 50, or 100.
+
+**"Find the most crowded trade on Hyperliquid right now"**
+Endpoints: `/position-metrics/coin/{coin}/segment/{segmentId}?start={1h ago}&end={now}` (per coin per cohort), or `/positions/heatmap` for a single bulk pull
+For each coin + cohort, compute long fraction (`totalPositionValueLong / totalPositionValue`). Flag a cohort as crowded when long fraction is > 0.8 or < 0.2. Weight by `totalPositionValue` so a crowded large position counts more than a small one. Score each coin by how many cohorts are crowded on the same side. The heatmap (`/positions/heatmap`) returns all coins and cohorts in one call with a pre-computed per-cohort `bias` (0-1 long fraction), so it is the faster path. PnL cohorts: 8 Money Printer, 9 Smart Money, 10 Consistent Grinder, 11 Humble Earner, 12 Exit Liquidity, 13 Semi-Rekt, 14 Full Rekt, 15 Giga-Rekt. Flag disagreements: when Smart Money leans one way but several weaker cohorts lean the other, that divergence is the higher-conviction signal.
+
+**"Build a personal portfolio auditor for my wallet"**
+Endpoints: `/wallets?address={address}`, `/closed-trades/summary?address={address}`, `/closed-trades?address={address}`, `/closed-trades/{hash}/fills`
+Pull wallet equity, exposure, and cohort segments from `/wallets`. Pull win rate, profit factor, expectancy, and the per-coin breakdown from `/closed-trades/summary`. Page through individual closed trades with `/closed-trades` (uses `startTime`/`endTime`, not `start`/`end`) and drill into execution quality per trade with `/closed-trades/{hash}/fills`. Render win-rate and profit-factor views from the summary; use the `coins[]` breakdown to show which assets the wallet is actually good at.
+
+**"Alpha screener: find and vet top traders before following them"**
+Endpoints: `/leaderboards/perp-pnl?rankBy=pnlMonth&limit=100`, `/wallets?address={address}`, `/positions?address={address}&start={ISO}&end={now}`, `/closed-trades/summary?address={address}`, `/closed-trades?address={address}`
+Discover candidates from the monthly leaderboard. For each, pull `/wallets` for equity and liquidation proximity, `/positions` for current active bias/size/leverage (note: `address` is an array param), and `/closed-trades/summary` for the long-term track record (win rate, profit factor, per-coin specialization). Drill into specific open/close pairs with `/closed-trades`. Rank survivors by per-coin `expectancy` or `profitFactor` to find genuine specialists.
+
+**"Macro sentiment and smart money cohort radar"**
+Endpoints: `/segments`, `/positions/heatmap`, `/position-metrics/general?start={ISO}&end={now}`, `/position-metrics/coin/{coin}?start={ISO}&end={now}`, `/position-metrics/coin/{coin}/segment/{segmentId}?start={ISO}&end={now}`, `/{segmentId}/assets/liquidation-risk`, `/state/summary`
+Pull cohort definitions from `/segments` (the data legend). Pull the global directional grid from `/positions/heatmap`. Layer in market-wide health from `/position-metrics/general` and per-coin concentration from `/position-metrics/coin/{coin}`. Track 15-minute trend shifts on divergent assets via `/position-metrics/coin/{coin}/segment/{segmentId}`. Add liquidation pressure from `/{segmentId}/assets/liquidation-risk` and network context from `/state/summary`. Build a macro indicator that isolates pairs where smart money is fading the retail crowd.
+
+**"Systematic exposure analysis and backtesting pipeline"**
+Endpoints: `/state/summary`, `/positions?start={ISO}&end={now}`, `/position-metrics/general?start={ISO}&end={now}`, `/position-metrics/coin/{coin}?start={ISO}&end={now}`, `/closed-trades/summary?address={address}`, `/closed-trades?address={address}`, `/closed-trades/{hash}/fills`, `/exports/coins/{coin}/liquidation-heatmap`
+Check data freshness with `/state/summary`. Pull current and historical positioning with `/positions` (paginate with `nextCursor`). Pull macro OI/position profiles from `/position-metrics/general` and per-coin exposure from `/position-metrics/coin/{coin}`. Sync cohort performance baselines from `/closed-trades/summary`, reconstruct open/close pairs from `/closed-trades`, and model entry/exit slippage from `/closed-trades/{hash}/fills`. Download price-bin liquidation structures from `/exports/coins/{coin}/liquidation-heatmap`. Note: positions history goes back to April 2025; per-coin cohort metrics ~4 weeks.
+
+**"Structural order flow and liquidation cluster mapper"**
+Endpoints: `/orders/5m-snapshots/latest-snapshot-timestamp`, `/orders/5m-snapshots/latest`, `/orders/5m-snapshots/{snapshotTime}`, `/orders/5m-snapshots/coins/{coin}/download`, `/{segmentId}/assets/liquidation-risk`, `/positions/heatmap`, `/builders/all-time-revenue`
+Poll `/orders/5m-snapshots/latest-snapshot-timestamp` to detect new snapshot intervals, then ingest the resting order book from `/orders/5m-snapshots/latest` (always pass `start` to filter zombie orders). Pull historical snapshots by timestamp, or bulk-export a coin's snapshots via `/orders/5m-snapshots/coins/{coin}/download`. Map liquidation pressure with `/{segmentId}/assets/liquidation-risk` and the position heatmap. Audit builder/frontend routing volume with `/builders/all-time-revenue`.
+
 ---
 
 ## Troubleshooting
