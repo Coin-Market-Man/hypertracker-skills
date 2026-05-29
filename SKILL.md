@@ -101,7 +101,7 @@ All 16 cohorts (both PnL and size) use `/segment/{segmentId}`. A separate `/posi
 
 **GET /positions/open/coin/{coin}** — Download latest open positions snapshot for a coin as CSV. Params: `coin` (path). Returns 302 redirect to presigned S3 URL. CSV columns include: id, address, coin, side, dex, size, value, entryPrice, unrealizedPnl, funding, liquidationPrice, liquidationProgress, crossLeverage, isolatedLeverage, openTime, and full profile data (totalEquity, perpEquity, countOpenPositions, pnl, balance, perpPnlSegmentId, sizeSegmentId).
 
-**GET /coin/{coin}/open-positions/history** — Historical open positions snapshot entries for a coin. Params: `coin` (path), `start`, `end`, `nextCursor`. Returns snapshot metadata with download URLs.
+**GET /coin/{coin}/open-positions/history** — Per-coin open-position snapshots with CSV download URLs. Returns the most recent snapshot at or before `end`, then pages backward in time via `nextCursor` (newest first, anchored to `end` rather than `start`). Snapshots run roughly every 15 minutes once available. Use this to pull a raw snapshot file at a point in time. History here is shallow (recent months only). For deep historical positions back to April 2025, use `GET /positions`. Params: `coin` (path), `start`, `end`, `nextCursor`.
 
 **GET /position-metrics/general** — Exchange-level OI, position counts, aggregate metrics. Params: `start` (required), `end`, `limit`, `nextCursor`.
 
