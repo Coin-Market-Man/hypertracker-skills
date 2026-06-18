@@ -1,6 +1,6 @@
 ---
 name: hypertracker
-description: Query HyperTracker's pre-computed analytics layer for Hyperliquid. Use when the user asks about Hyperliquid wallets, cohort positioning (Money Printer, Smart Money, Whales, etc.), live order flow, closed trades, liquidation risk, leaderboards, smart money flows, or wants to analyze any address or position on Hyperliquid perps. Covers 21 endpoints across positions, fills, orders, segments (cohorts), and heatmaps. Requires a JWT bearer token from coinmarketman.com.
+description: Query HyperTracker's pre-computed analytics layer for Hyperliquid. Use when the user asks about Hyperliquid wallets, cohort positioning (Money Printer, Smart Money, Whales, etc.), live order flow, closed trades, liquidation risk, leaderboards, smart money flows, or wants to analyze any address or position on Hyperliquid perps. Covers 21 endpoints across positions, fills, orders, segments (cohorts), and heatmaps. Requires a JWT bearer token from hypertracker.io.
 ---
 
 # HyperTracker API
