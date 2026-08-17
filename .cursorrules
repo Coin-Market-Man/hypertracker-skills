@@ -371,7 +371,7 @@ Pass the `nextCursor` value as the `nextCursor` query parameter on the next requ
 
 ## Rate Limits
 
-| Tier | Price | Requests | Rate Limit |
+| Tier | Price | Tokens | Rate Limit, req/min |
 |------|-------|----------|------------|
 | Free | $0 | 100/day | — |
 | Pulse | $179/mo | 50,000/mo | 60/min |
