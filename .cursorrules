@@ -314,7 +314,7 @@ Pass `nextCursor` value as `cursor` query parameter on the next request to get t
 
 ## Rate Limits
 
-| Tier | Price | Requests | Rate Limit | Webhooks | WebSocket |
+| Tier | Price | Tokens | Rate Limit | Webhooks | WebSocket |
 |------|-------|----------|------------|----------|-----------|
 | Free | $0 | 100/day | — | No | No |
 | Pulse | $179/mo | 50,000/mo | 60/min | No | No |

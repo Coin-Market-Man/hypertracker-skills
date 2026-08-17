@@ -314,12 +314,12 @@ Pass `nextCursor` value as `cursor` query parameter on the next request to get t
 
 ## Rate Limits
 
-| Tier | Price | Requests | Rate Limit | Webhooks | WebSocket |
-|------|-------|----------|------------|----------|-----------|
-| Free | $0 | 100/day | — | No | No |
-| Pulse | $179/mo | 50,000/mo | 60/min | No | No |
-| Surge | $399/mo | 150,000/mo | 100/min | No | No |
-| Flow | $799/mo | 400,000/mo | 200/min | Yes | No |
+| Tier | Price | Tokens       | Rate Limit | Webhooks | WebSocket |
+|------|-------|--------------|------------|----------|-----------|
+| Free | $0 | 100/day      | — | No | No |
+| Pulse | $179/mo | 50,000/mo    | 60/min | No | No |
+| Surge | $399/mo | 150,000/mo   | 100/min | No | No |
+| Flow | $799/mo | 400,000/mo   | 200/min | Yes | No |
 | Stream | $1,999/mo | 2,000,000/mo | 500/min | Yes | Yes |
 
 **Note:** Some endpoints may support up to 200 requests/min. The rate limit counter on the API dashboard may not reflect per-endpoint limits.
