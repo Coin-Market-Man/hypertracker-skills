@@ -294,7 +294,7 @@ Live Hyperliquid fills, account events, TWAP updates and order events over WebSo
 
 ### Server-Side Alerts (Events API, Beta)
 
-Define what to watch, give HyperTracker an HTTPS URL, and each match is POSTed to your server as JSON. No polling. Available on all plans, including Free. Every alert-management request and every successful delivery uses one usage token; failed attempts, retries and paused or suspended skips are not billed. The API contract is stable; the product is labelled Beta.
+Define what to watch, give HyperTracker an HTTPS URL, and each match is POSTed to your server as JSON. No polling. Available on all plans, including Free. Every alert-management request and every successful delivery uses one usage token; failed attempts, retries and paused or suspended skips are not billed. The API contract is stable; the product is labeled Beta.
 
 **Routes** (same base URL and Bearer token as REST):
 
@@ -798,10 +798,9 @@ asyncio.run(main())
 ### Server-side alert: whale liquidations to your webhook
 ```bash
 BASE=https://ht-api.coinmarketman.com/api/external
-: "${TOKEN:?set TOKEN}" "${SECRET:?set SECRET, e.g. SECRET=$(openssl rand -hex 32)}"
+: "${TOKEN:?set TOKEN}" "${SECRET:?set SECRET first, e.g. with openssl rand -hex 32}" &&
 EP=$(curl -s -X POST "$BASE/events/endpoints" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"endpoint":"https://yourapp.com/webhooks/hypertracker","secretKey":"'"$SECRET"'","description":"liquidation alerts"}' | jq -er .id) || exit 1
-
+  -d '{"endpoint":"https://yourapp.com/webhooks/hypertracker","secretKey":"'"$SECRET"'","description":"liquidation alerts"}' | jq -er .id) &&
 curl -s -X POST "$BASE/events" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"eventType":"liquidation","webhookEndpointId":'"$EP"',"filters":{"thresholdUsd":"1000000","markets":["BTC","ETH"],"side":"both"}}'
 ```
