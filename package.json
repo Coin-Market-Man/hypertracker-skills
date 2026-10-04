@@ -1,7 +1,7 @@
 {
   "name": "@coinmarketman/hypertracker-skills",
   "version": "0.1.0",
-  "description": "AI assistant skill files for the HyperTracker API — cohort analytics, order flow, liquidation risk, and leaderboard data from Hyperliquid",
+  "description": "AI assistant skill files for the HyperTracker API: cohort analytics, order flow, liquidations, leaderboards, WebSocket streams and server-side alerts for Hyperliquid",
   "bin": {
     "hypertracker-skills": "bin/install.js"
   },
