@@ -33,12 +33,12 @@ All REST paths below are relative to this base URL. WebSocket streams use `wss:/
 4. **Boolean query params are lowercase strings.** Send `open=true`, not `open=True`. Python `requests` serializes `True` as `True`, which the API reads as false: `open=True` returns closed positions and `hasOpenPositions=True` returns wallets with no open positions. Pass `"true"`/`"false"` as strings.
 5. **Some params must be arrays.** On `/fills` and `/builders/{builder}/fills`, `address` and `coin` must be sent as arrays: `address[]=0xabc...&coin[]=BTC`, or repeat the key (`address=0x1...&address=0x2...`). A single scalar `address=0x...` or `coin=BTC` returns 400 `"... must be an array"`. On `/positions`, repeat `address` for multiple wallets.
 6. **`/fills` requires `address` (1 to 10 wallets) and a window inside one UTC calendar day.** There is no market-wide fill pull in REST. A window that crosses midnight UTC returns 400 `"End date must be within the same day as the start date"`. For exchange-wide fills use the WebSocket `rooms:fills` stream; for liquidations use `/fills/liquidation`.
-7. **Closed trades and fundings use `startTime`/`endTime`, not `start`/`end`.** The window between them can be at most one month (400 `"endTime - startTime can not be longer then 1 month"` on closed trades, `"... cannot be longer than 1 month"` on fundings). `start`/`end` are silently ignored. The missing bound defaults to now (or now minus 7 days), so passing only a `startTime` more than a month back fails and passing only an `endTime` older than 7 days returns an empty list: set both. For longer history, loop over consecutive windows of 30 days or less.
+7. **Closed trades and fundings use `startTime`/`endTime`, not `start`/`end`.** The window between them can be at most one month (400 `"endTime - startTime can not be longer then 1 month"` on closed trades, `"... cannot be longer than 1 month"` on fundings). `start`/`end` are silently ignored. The missing bound defaults to now (or now minus 7 days), so passing only a `startTime` more than a month back fails and passing only an `endTime` older than 7 days returns an empty list: set both. The limit is one calendar month, not 30 days (February 1 to March 2 fails), so for longer history loop over consecutive windows of 28 days or less.
 8. **Paginate with `nextCursor`.** Pass the response's `nextCursor` back as the `nextCursor` query param. A param named `cursor` is silently ignored and returns page 1 forever. When `nextCursor` is `null` or absent, you have every page.
-9. **Default page size varies by endpoint.** 100 for orders, closed trades, closed-trade fills, fundings and wallets; 500 for fills and liquidation fills; 1000 for positions and position metrics; 25 for the perp-PnL leaderboard; 100 for the all-PnL and biggest-positions leaderboards. Most endpoints cap `limit` at 1000; closed trades, fundings, wallets, liquidation risk and HYPE holders cap at 500; `/leaderboards/perp-pnl` accepts only 25, 50 or 100, while `/leaderboards/all-pnl` and `/leaderboards/biggest-positions` accept 1 to 100.
+9. **Default page size varies by endpoint.** 100 for orders, closed trades, closed-trade fills, fundings and wallets; 250 for liquidation risk; 500 for fills and liquidation fills; 1000 for positions and position metrics; 25 for the perp-PnL leaderboard; 100 for the all-PnL and biggest-positions leaderboards. Most endpoints cap `limit` at 1000; closed trades, fundings, wallets, liquidation risk and HYPE holders cap at 500; `/leaderboards/perp-pnl` accepts only 25, 50 or 100, while `/leaderboards/all-pnl` and `/leaderboards/biggest-positions` accept 1 to 100.
 10. **Leaderboards: set `orderBy` to the same value as `rankBy`.** `orderBy` controls the sort and defaults to `pnlAllTime`; `rankBy` only controls the `rank` number. `?rankBy=pnlDay&limit=25` alone returns the all-time top, not today's. Use `?rankBy=pnlDay&orderBy=pnlDay&order=desc&limit=25`.
-11. **Follow redirects and download immediately.** Several endpoints answer with a 302 to a pre-signed S3 file, or return a `downloadUrl` (CSV/JSON exports, snapshot summaries, builder lists). `requests` and `fetch` follow redirects by default; with curl use `-L`. Pre-signed links expire after 30 to 240 seconds (30 seconds for per-coin exports and `/segments/{id}/summary`). A 0-byte body usually means the redirect was not followed.
-12. **Most data refreshes on each Hyperliquid state update (roughly every 15 to 30 minutes).** Order snapshots refresh every 5 minutes; see Data Freshness below. Polling faster than the cadence uses your usage allowance without returning new data.
+11. **Follow redirects and download immediately.** Several endpoints answer with a 302 to a pre-signed S3 file, or return a `downloadUrl` (CSV/JSON exports, snapshot summaries, builder lists, and `/hypertracker/state/status`, whose `status.json` link expires after about 120 seconds). `requests` and `fetch` follow redirects by default; with curl use `-L`. Pre-signed links expire after 30 to 240 seconds (30 seconds for per-coin exports and `/segments/{id}/summary`). A 0-byte body usually means the redirect was not followed.
+12. **Most data refreshes on each Hyperliquid state update (about every 30 minutes).** Order snapshots refresh every 5 minutes; see Data Freshness below. Polling faster than the cadence uses your usage allowance without returning new data.
 
 ---
 
@@ -48,7 +48,7 @@ All REST paths below are relative to this base URL. WebSocket streams use `wss:/
 |------|----------------|
 | Order snapshots (`/orders/5m-snapshots/*`) | Every 5 minutes |
 | Exchange-wide position metrics (`/position-metrics/general`) | About every 10 minutes |
-| State, positions, per-coin and per-cohort metrics, heatmap, open-position CSVs | Each state update, usually every 15 to 30 minutes. Check `GET /hypertracker/state/status` (`lastUpdate`, `nextUpdate`) or subscribe to the state webhook. |
+| State, positions, per-coin and per-cohort metrics, heatmap, open-position CSVs | Each state update, about every 30 minutes. Check `GET /hypertracker/state/status` (`lastUpdate`, `nextUpdate`) or subscribe to the state webhook. |
 | Cohort bias history (`/segments/{id}/bias-history`) | Stored every 2 hours by default (about every 30 minutes with `positionRecencyTimeframe=24h` and a `start`; a call without `start` is always 2-hourly) |
 | Closed trades | About 10 seconds after a trade's final fill |
 | WebSocket streams, server-side alerts | Real time |
@@ -158,7 +158,7 @@ Cohort membership moves as PnL and equity change. When you compare two snapshots
 
 **GET /orders/5m-snapshots/coins/{coin}/download**: Download link for the **latest** 5-minute open-orders snapshot of one coin. Returns `{downloadUrl}` pointing to a gzip-compressed JSON array of orders (several MB for BTC), served as `application/gzip` without a `Content-Encoding` header, so HTTP clients do not decompress it automatically: gunzip the bytes before parsing. The link expires after about 240 seconds.
 
-**GET /orders/5m-snapshots/{snapshotTime}/download**: Download link for a full historical 5-minute snapshot as an LZ4-compressed JSON file (`.json.lz4`). `snapshotTime` must be on a 5-minute boundary. Files currently exist only for about January 19 to March 10, 2026; later timestamps return 404 `"Snapshot file is not available at the moment..."`. For recent history use `/orders/5m-snapshots/{snapshotTime}` (last 30 days) or the per-coin latest download.
+**GET /orders/5m-snapshots/{snapshotTime}/download**: Download link for a full historical 5-minute snapshot as an LZ4-compressed JSON file (`.json.lz4`). `snapshotTime` must be on a 5-minute boundary. `snapshotTime` must be on or after 2026-01-19 11:05 UTC, and files currently exist only for about January 19 to March 12, 2026; later timestamps return 404 `"Snapshot file is not available at the moment..."`. For recent history use `/orders/5m-snapshots/{snapshotTime}` (last 30 days) or the per-coin latest download.
 
 ### Liquidation Data
 
@@ -184,15 +184,15 @@ Cohort membership moves as PnL and equity change. When you compare two snapshots
 
 **GET /fills**: Trade executions for specific wallets. Params: `address[]` (**required**, 1 to 10 wallets), `start` (**required**), `end` (same UTC calendar day; defaults to now), `coin[]` (array), `builder`, `side` (`A` sell, `B` buy), `limit` (default 500, max 1000), `nextCursor`. Returns `{fills, nextCursor}`, including spot fills (spot coins appear as `@142` with `fullCoinName` and `fillType`). History from July 2025.
 
-**GET /fundings**: Funding payments received or paid by a wallet. Params: `address` (**required**, any case), `coin` (HIP-3 supported), `startTime`, `endTime` (at most 1 month apart; defaults to the last 7 days), `limit` (default 100, max 500), `nextCursor`. Returns `{fundings: [{time, blockNumber, address, coin, fundingAmount, szi, fundingRate}], nextCursor}`. `fundingAmount` is positive when received and negative when paid. History from September 27, 2025.
+**GET /fundings**: Funding payments received or paid by a wallet. Params: `address` (**required**, any case), `coin` (HIP-3 supported), `startTime`, `endTime` (at most one calendar month apart, so use windows of 28 days or less; defaults to the last 7 days), `limit` (default 100, max 500), `nextCursor`. Returns `{fundings: [{time, blockNumber, address, coin, fundingAmount, szi, fundingRate}], nextCursor}`. `fundingAmount` is positive when received and negative when paid. History from September 27, 2025.
 
 ### Closed Trades
 
 HyperTracker reconstructs complete closed trades from every raw Hyperliquid fill, about 10 seconds after a trade's final fill. History from July 2025. A closed trade is one position lifecycle on one coin (opened from flat, closed back to flat); scale-ins and partial exits are folded into that one trade.
 
-**GET /closed-trades**: Closed trades for a wallet. Params: `address` (**required**), `startTime`, `endTime` (close-time window, at most 1 month apart; defaults to the last 7 days), `limit` (default 100, max 500), `nextCursor`. For full history, loop over consecutive windows of 30 days or less, paginate each with `nextCursor`, and dedupe on `id`.
+**GET /closed-trades**: Closed trades for a wallet. Params: `address` (**required**), `startTime`, `endTime` (close-time window, at most one calendar month apart; defaults to the last 7 days), `limit` (default 100, max 500), `nextCursor`. For full history, loop over consecutive windows of 28 days or less (the limit is one calendar month), paginate each with `nextCursor`, and dedupe on `id`.
 
-**GET /closed-trades/summary**: Aggregate analytics for a wallet's closed trades, overall and per coin. Params: `address` (**required**; any case is accepted), `interval` (`all`, `365d`, `180d`, `90d`, `30d`, `last50`; default `all`). Returns `address`, `range` (`allTime`, `last365Days`, `last180Days`, `last90Days`, `last30Days` or `last50Trades`), `updatedAt`, a `summary` object and a `coins` array with the same metrics per asset (only coins traded within the interval). Metrics: trade counts (`totalTrades`, `wins`, `losses`, `longTrades`, `shortTrades`), `winRate` (0-1 float), durations (`avgDuration`, `medianDuration` in milliseconds), PnL (`totalWinningPnl`, `totalLosingPnl`, `netPnl`), gain/loss stats (`avgGain`, `avgLoss`, `medianGain`, `medianLoss`), quality ratios (`profitFactor`, `payoffRatio`, `expectancy`, `expectancyPct`) and size/cost stats (`avgTradeSize`, `medianSizeUsd`, `totalFeesPaid`, `totalVolumeUsd`). Each `coins[]` entry also has `volumeSharePct`. `coins[]` is sorted by `totalTrades` descending. Null rules: with zero trades, `winRate`, durations and every ratio are `null`; with zero wins, `avgGain`/`medianGain` are `null`; with zero losses, `avgLoss`/`medianLoss`/`profitFactor`/`payoffRatio` can be `null`. Guard for nulls. The summary does not expose fill counts: a wallet that never goes flat can show a handful of "trades" built from thousands of fills, so check `countFills` on `/closed-trades` before treating a win rate as a discretionary track record.
+**GET /closed-trades/summary**: Aggregate analytics for a wallet's closed trades, overall and per coin. Params: `address` (**required**; any case is accepted), `interval` (`all`, `365d`, `180d`, `90d`, `30d`, `last50`; default `all`). Returns `address`, `range` (`allTime`, `last365Days`, `last180Days`, `last90Days`, `last30Days` or `last50Trades`), `updatedAt`, a `summary` object and a `coins` array with the same metrics per asset (only coins traded within the interval). Metrics: trade counts (`totalTrades`, `wins`, `losses`, `longTrades`, `shortTrades`), `winRate` (0-1 float), durations (`avgDuration`, `medianDuration` in milliseconds), PnL (`totalWinningPnl`, `totalLosingPnl`, `netPnl`), gain/loss stats (`avgGain`, `avgLoss`, `medianGain`, `medianLoss`), quality ratios (`profitFactor`, `payoffRatio`, `expectancy`, `expectancyPct`) and size/cost stats (`avgTradeSize`, `medianSizeUsd`, `totalFeesPaid`, `totalVolumeUsd`). Each `coins[]` entry also has `volumeSharePct`. `coins[]` is sorted by `totalTrades` descending. `interval=last50` also returns `dateRange: {fromOpenTime, toCloseTime}`, which is absent for every other interval. Null rules (verified on prod): with zero wins, `avgGain`, `medianGain`, `payoffRatio`, `expectancy` and `expectancyPct` are `null` and `profitFactor` is `0`; with zero losses, `avgLoss`, `medianLoss`, `profitFactor`, `payoffRatio`, `expectancy` and `expectancyPct` are `null`; with zero trades, `winRate`, durations, every ratio, `avgTradeSize` and `medianSizeUsd` are `null` and `coins` is `[]`. Guard for nulls. The summary does not expose fill counts: a wallet that never goes flat can show a handful of "trades" built from thousands of fills, so check `countFills` on `/closed-trades` before treating a win rate as a discretionary track record.
 
 **GET /closed-trades/{hash}**: One closed trade by hash. Params: `hash` (path, **required**).
 
@@ -335,7 +335,7 @@ Create the endpoint first; its `id` becomes the rule's `webhookEndpointId`. The 
 
 ### State Webhooks
 
-Configure in the API Dashboard (Webhook States card, then Add Webhook URL; `https://` only, optional Bearer header). After each state refresh (roughly every 15 to 30 minutes) HyperTracker POSTs `{"event": "stateUpdated", "timestamp": "...", "data": {}}`. The ping carries no data; use it to trigger your REST refresh instead of polling. Check the pricing page for which plans include webhooks.
+Configure in the API Dashboard (Webhook States card, then Add Webhook URL; `https://` only, optional Bearer header). After each state refresh (about every 30 minutes) HyperTracker POSTs `{"event": "stateUpdated", "timestamp": "...", "data": {}}`. The ping carries no data; use it to trigger your REST refresh instead of polling. Check the pricing page for which plans include webhooks.
 
 ### Enterprise & Dedicated Infrastructure
 
@@ -601,7 +601,7 @@ Rows are newest first. `nextCursor`, `pageStart` and `pageEnd` appear only when 
   ]
 }
 ```
-`winRate` is a 0-1 float (multiply by 100 for a percentage). Durations are milliseconds. Formulas (verified against prod): `profitFactor = totalWinningPnl / abs(totalLosingPnl)`, `payoffRatio = avgGain / abs(avgLoss)`, `expectancy = netPnl / totalTrades` (average dollar PnL per trade; the docs write it as `winRate * avgGain + (1 - winRate) * avgLoss`, which is the same when there are no break-even trades), `expectancyPct = expectancy / avgTradeSize`, `volumeSharePct = coin totalVolumeUsd / summary totalVolumeUsd`. `updatedAt` is `null` for wallets with no closed trades.
+`winRate` is a 0-1 float (multiply by 100 for a percentage). Durations are milliseconds. Formulas (verified against prod): `profitFactor = totalWinningPnl / abs(totalLosingPnl)`, `payoffRatio = avgGain / abs(avgLoss)`, `expectancy = winRate * avgGain + (1 - winRate) * avgLoss` (average dollar PnL per trade; when both wins and losses are above 0 it equals `netPnl / totalTrades`, and when either is 0 the API returns `null`, see the null rules under `/closed-trades/summary`), `expectancyPct = expectancy / avgTradeSize`, `volumeSharePct = coin totalVolumeUsd / summary totalVolumeUsd`. `updatedAt` is `null` for wallets with no closed trades.
 
 ### Paginated responses
 Paginated endpoints return a named array plus `nextCursor`. The array key varies (`positions`, `fills`, `orders`, `trades`, `fundings`, `metrics`, `items`).
@@ -699,19 +699,21 @@ for _ in range(5):
     day += timedelta(days=1)
 ```
 
-### Full closed-trade history (30-day windows)
+### Full closed-trade history (28-day windows)
 ```python
 def all_closed_trades(address, since, until):
     trades, seen = [], set()
     window_start = since
     while window_start < until:
-        window_end = min(window_start + timedelta(days=30), until)
+        window_end = min(window_start + timedelta(days=28), until)  # the limit is one calendar month
         cursor = None
         while True:
             params = {"address": address, "startTime": iso(window_start), "endTime": iso(window_end), "limit": 500}
             if cursor:
                 params["nextCursor"] = cursor
-            resp = requests.get(f"{BASE}/closed-trades", headers=HEADERS, params=params).json()
+            r = requests.get(f"{BASE}/closed-trades", headers=HEADERS, params=params)
+            r.raise_for_status()
+            resp = r.json()
             for t in resp["trades"]:
                 if t["id"] not in seen:
                     seen.add(t["id"])
@@ -960,10 +962,10 @@ Fetch today's leaders, then create one `position_activity` alert rule with their
 
 **"Pull this wallet's full closed trade history and compute their win rate and average hold."**
 Endpoints: `/closed-trades/summary?address={address}`, `/closed-trades?address={address}&startTime=...&endTime=...`
-Use `/summary` for `winRate`, `wins`, `losses`, `totalTrades`, `avgDuration`, `profitFactor`, `expectancy`. Use `/closed-trades` in 30-day windows for per-trade detail (entry, exit, realized PnL, fill count).
+Use `/summary` for `winRate`, `wins`, `losses`, `totalTrades`, `avgDuration`, `profitFactor`, `expectancy`. Use `/closed-trades` in 28-day windows for per-trade detail (entry, exit, realized PnL, fill count).
 
 **"Show me the most profitable closed trades on Hyperliquid this month, by wallet."**
-Endpoints: `/leaderboards/perp-pnl?rankBy=pnlMonth&orderBy=pnlMonth&order=desc&limit=25`, `/closed-trades/summary?address={address}`, `/closed-trades?address={address}&startTime={30d ago}`
+Endpoints: `/leaderboards/perp-pnl?rankBy=pnlMonth&orderBy=pnlMonth&order=desc&limit=25`, `/closed-trades/summary?address={address}`, `/closed-trades?address={address}&startTime={28d ago}`
 Monthly leaders give candidates; pull each one's summary, then their largest trades by `realizedPnlUsd`.
 
 **"Build a wallet-follow feed for a wallet"**
@@ -975,8 +977,8 @@ Push every non-TWAP fill from the watched wallets to your webhook with a `positi
 The per-coin breakdown in `/closed-trades/summary` (`coins[]`) turns the endpoint into a wallet-discovery engine. Each coin entry has its own `winRate`, `profitFactor`, `expectancy` and `netPnl`, so you can find traders who are good on a specific asset.
 
 **"Find the best [COIN] traders on Hyperliquid"**
-Endpoints: `/leaderboards/perp-pnl?rankBy=pnlMonth&orderBy=pnlMonth&order=desc&limit=100`, `/closed-trades/summary?address={address}`, `/closed-trades?address={address}&startTime={30d ago}`
-Pull the top 100 monthly wallets. For each, find the target coin in `coins[]` and keep specialists: `totalTrades > 20`, `winRate > 0.6`, `profitFactor > 2`, `expectancyPct > 0.02`. Then vet survivors: check `countFills` on their recent trades (dozens or thousands of fills per trade usually means an execution algorithm, not a copyable decision), and confirm recent performance with `interval=30d`, since a strong all-time record can hide a losing month. Rank by per-coin `expectancy` or `netPnl`. Add cohort context from `/wallets?address={address}`.
+Endpoints: `/leaderboards/perp-pnl?rankBy=pnlMonth&orderBy=pnlMonth&order=desc&limit=100`, `/closed-trades/summary?address={address}`, `/closed-trades?address={address}&startTime={28d ago}`
+Pull the top 100 monthly wallets. For each, find the target coin in `coins[]` and keep specialists: `totalTrades > 20`, `winRate > 0.6`, `profitFactor > 2`, `expectancyPct > 0.02`. Then vet survivors: check `countFills` on their recent trades (dozens or thousands of fills per trade usually means an execution algorithm, not a copyable decision), and confirm recent performance with `interval=30d`, since a strong all-time record can hide a losing month. Rank by per-coin `expectancy` or `netPnl`. Guard the filters for nulls: a specialist with no losing trades has `profitFactor: null` and `expectancy: null`, so `profitFactor > 2` silently drops them in JavaScript and raises `TypeError` in Python. Treat `profitFactor: null` with `losses == 0` as infinite, and rank coins with `expectancy: null` by `netPnl`. Add cohort context from `/wallets?address={address}`.
 
 **"Build a follow watchlist for [COIN] specialists"**
 Endpoints: `/leaderboards/perp-pnl?rankBy=pnlMonth&orderBy=pnlMonth&order=desc&limit=100`, `/closed-trades/summary?address={address}`, `POST /events` (`position_activity` with `filters.coin`)
@@ -984,7 +986,7 @@ Use the specialist filter and vetting above to pick 5-10 wallets, then create on
 
 **"Find high-volume wallets with a losing track record to fade"**
 Endpoints: `/leaderboards/perp-pnl?rankBy=pnlMonth&orderBy=pnlMonth&order=asc&limit=100`, `/closed-trades/summary?address={address}`, `/positions?address={address}&open=true&start=2025-04-04T00:00:00.000Z`
-Filter to `totalTrades > 100`, `winRate < 0.4`, `profitFactor < 0.8`, `totalVolumeUsd > 10000000`. Most fall into Exit Liquidity (12), Full Rekt (14) or Giga-Rekt (15). Return them as a fade list with their current open positions.
+Filter to `totalTrades > 100`, `winRate < 0.4`, `profitFactor < 0.8`, `totalVolumeUsd > 10000000`. Most fall into Exit Liquidity (12), Full Rekt (14) or Giga-Rekt (15). Guard for nulls as in the recipe above (`profitFactor` is `0`, not `null`, when a coin has no wins). Return them as a fade list with their current open positions.
 
 ### Reverse Lookup
 
@@ -1051,7 +1053,7 @@ For each coin and PnL cohort (8-15), read the long fraction (`bias` on the heatm
 
 **"Build a personal portfolio auditor for my wallet"**
 Endpoints: `/wallets?address={address}`, `/closed-trades/summary?address={address}`, `/closed-trades?address={address}`, `/closed-trades/{hash}/fills`, `/fundings?address={address}`
-Equity, exposure and cohorts from `/wallets`; win rate, profit factor, expectancy and the per-coin breakdown from the summary; per-trade detail and execution quality from `/closed-trades` and its fills; and total funding paid or received per coin from `/fundings` (month by month). Show which assets the wallet is actually good at and what funding cost it.
+Equity, exposure and cohorts from `/wallets`; win rate, profit factor, expectancy and the per-coin breakdown from the summary; per-trade detail and execution quality from `/closed-trades` and its fills; and total funding paid or received per coin from `/fundings` (28-day windows). Show which assets the wallet is actually good at and what funding cost it.
 
 **"Alpha screener: find and vet top traders before following them"**
 Endpoints: `/leaderboards/perp-pnl?rankBy=pnlMonth&orderBy=pnlMonth&order=desc&limit=100`, `/wallets?address={address}`, `/positions?address={address}&open=true&start=2025-04-04T00:00:00.000Z`, `/closed-trades/summary?address={address}`, `/closed-trades?address={address}`
@@ -1059,11 +1061,11 @@ Discover candidates from the monthly leaderboard. For each, pull equity and liqu
 
 **"Macro sentiment and smart money cohort radar"**
 Endpoints: `/segments`, `/positions/heatmap`, `/position-metrics/general?start={ISO}&end={now}`, `/position-metrics/coin/{coin}?start={ISO}&end={now}`, `/position-metrics/coin/{coin}/segment/{segmentId}?start={ISO}&end={now}`, `/{segmentId}/assets/liquidation-risk`, `/state/summary`
-Cohort definitions from `/segments`, the global directional grid from the heatmap, market health from `/position-metrics/general`, per-coin concentration from `/position-metrics/coin/{coin}`, and per-cohort trend shifts (one point per state update, roughly every 15 to 30 minutes) from the per-cohort series. Add liquidation exposure and network context. Isolate coins where smart money is fading the retail crowd.
+Cohort definitions from `/segments`, the global directional grid from the heatmap, market health from `/position-metrics/general`, per-coin concentration from `/position-metrics/coin/{coin}`, and per-cohort trend shifts (one point per state update, about every 30 minutes) from the per-cohort series. Add liquidation exposure and network context. Isolate coins where smart money is fading the retail crowd.
 
 **"Systematic exposure analysis and backtesting pipeline"**
 Endpoints: `/hypertracker/state/status`, `/positions?start={ISO}`, `/position-metrics/general?start={ISO}&end={now}`, `/position-metrics/coin/{coin}?start={ISO}&end={now}`, `/closed-trades/summary?address={address}`, `/closed-trades?address={address}`, `/closed-trades/{hash}/fills`, `/exports/coins/{coin}/liquidation-heatmap`
-Check freshness with `/hypertracker/state/status`. Pull positioning from `/positions` (paginate with `nextCursor`), macro OI from `/position-metrics/general` and per-coin exposure from `/position-metrics/coin/{coin}`. Build performance baselines from `/closed-trades/summary`, open/close pairs from `/closed-trades` (30-day windows) and slippage from `/closed-trades/{hash}/fills`. Download liquidation price bins from `/exports/coins/{coin}/liquidation-heatmap`.
+Check freshness with `/hypertracker/state/status`. Pull positioning from `/positions` (paginate with `nextCursor`), macro OI from `/position-metrics/general` and per-coin exposure from `/position-metrics/coin/{coin}`. Build performance baselines from `/closed-trades/summary`, open/close pairs from `/closed-trades` (28-day windows) and slippage from `/closed-trades/{hash}/fills`. Download liquidation price bins from `/exports/coins/{coin}/liquidation-heatmap`.
 
 **"Structural order flow and liquidation cluster mapper"**
 Endpoints: `/orders/5m-snapshots/latest-snapshot-timestamp`, `/orders/5m-snapshots/latest`, `/orders/5m-snapshots/{snapshotTime}`, `/orders/5m-snapshots/coins/{coin}/download`, `/{segmentId}/assets/liquidation-risk`, `/positions/heatmap`, `/exports/coins/{coin}/liquidation-heatmap`
@@ -1087,7 +1089,7 @@ Pick wallets with the discovery recipes, then create one `position_activity` rul
 
 **"Wallet funding audit: how much has funding cost this trader?"**
 Endpoints: `/fundings?address={address}&startTime=...&endTime=...`, `/closed-trades?address={address}`
-Pull funding month by month (each window at most 1 month), total `fundingAmount` per coin, and compare with realized PnL per coin from closed trades. Flag positions where funding paid ate most of the gain.
+Pull funding in windows of 28 days or less (the limit is one calendar month), total `fundingAmount` per coin, and compare with realized PnL per coin from closed trades. Flag positions where funding paid ate most of the gain.
 
 **"Keep a dashboard in sync without polling"**
 Endpoints: state webhook (`stateUpdated`), `/hypertracker/state/status`, any REST endpoints
@@ -1107,13 +1109,13 @@ Register a state webhook in the API dashboard. On each `stateUpdated` ping, re-f
 | Open positions missing from `/positions` | `start` filters on `openTime`; set it earlier (e.g. `2025-04-04T00:00:00.000Z`). |
 | Leaderboard shows the wrong period | Set `orderBy` to the same value as `rankBy` and `order=desc`. |
 | Same page returned forever | Paginate with `nextCursor`, not `cursor`. |
-| Closed trades empty or 400 | Use `startTime`/`endTime` (not `start`/`end`), keep the window at 1 month or less, and remember the default is the last 7 days. |
+| Closed trades empty or 400 | Use `startTime`/`endTime` (not `start`/`end`), keep each window at 28 days or less (the limit is one calendar month), and remember the default is the last 7 days. |
 | Empty order snapshots | Paginated snapshots cover the last 30 days only, on 5-minute boundaries. |
-| Snapshot download returns 404 "not available" | Historical files exist only for about January 19 to March 10, 2026; use `/orders/5m-snapshots/{snapshotTime}` (last 30 days) or the per-coin latest download. |
+| Snapshot download returns 404 "not available" | Historical files exist only for about January 19 to March 12, 2026; use `/orders/5m-snapshots/{snapshotTime}` (last 30 days) or the per-coin latest download. |
 | 0-byte response or broken download | The endpoint redirected to a pre-signed file. Follow redirects (`curl -L`) and fetch `downloadUrl` immediately; links can expire in as little as 30 seconds. |
 | `/wallets` returns no items for a real address | Only active wallets are listed (perp volume in the last 30 days or an open position), and the address must be lowercase. Use `/closed-trades/summary` for history. |
 | A coin is missing from liquidation risk | Results are sorted by `percentRisk`; page with `offset`. |
-| Data looks stale | Most data updates on Hyperliquid state updates (roughly every 15 to 30 minutes). Read `createdAt` and check `/hypertracker/state/status`. |
+| Data looks stale | Most data updates on Hyperliquid state updates (about every 30 minutes). Read `createdAt` and check `/hypertracker/state/status`. |
 | Cohort totals look doubled | You summed size and PnL cohorts together. Sum within one axis only. |
 | `POST /info` returns 400 "Invalid Hyperliquid wallet address" | Include `user` in the body for every `type`. |
 | WebSocket closes with `3008 slow` | Your filter is too broad (always filter `orders:feed`), or your handler is too slow. |

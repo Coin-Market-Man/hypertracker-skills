@@ -3,7 +3,8 @@
 
 SKILL.md gets the YAML frontmatter that `npx skills` needs; every other file is a verbatim copy.
 Run from the repo root after editing the master:  python3 scripts/sync-skill-files.py
-Use --check in CI to fail when any copy has drifted from the master.
+Use --check in CI to fail when any copy has drifted from the master (.github/workflows/skill-sync.yml runs it).
+Files are always read and written as UTF-8 with LF line endings, on every platform.
 """
 import sys
 from pathlib import Path
@@ -20,7 +21,7 @@ COPIES = ["AGENTS.md", "copilot-instructions.md", ".github/copilot-instructions.
 
 
 def targets():
-    body = MASTER.read_text()
+    body = MASTER.read_text(encoding="utf-8")
     yield ROOT / "SKILL.md", FRONTMATTER + body
     for name in COPIES:
         yield ROOT / name, body
@@ -31,11 +32,11 @@ def main():
     drift = []
     for path, content in targets():
         if check:
-            if not path.exists() or path.read_text() != content:
+            if not path.exists() or path.read_text(encoding="utf-8") != content:
                 drift.append(path.relative_to(ROOT))
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content)
+            path.write_text(content, encoding="utf-8", newline="\n")
             print("synced", path.relative_to(ROOT))
     if check:
         if drift:
