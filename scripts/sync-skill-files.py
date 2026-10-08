@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 MASTER = ROOT / "hypertracker-skill-master.md"
 FRONTMATTER = """---
 name: hypertracker
-description: Query HyperTracker's pre-computed analytics layer for Hyperliquid. Use when the user asks about Hyperliquid wallets, cohort positioning (Money Printer, Smart Money, Whales, etc.), order flow, closed trades, fundings, liquidations, leaderboards, builder codes, real-time WebSocket streams, server-side alerts or webhooks, or wants to analyze any address or position on Hyperliquid perps (including HIP-3 markets). Requires a JWT bearer token from the HyperTracker API dashboard.
+description: Query HyperTracker's pre-computed analytics layer for Hyperliquid. Use when the user asks about Hyperliquid wallets, cohort positioning (Money Printer, Smart Money, Whales, etc.), order flow, closed trades, fundings, liquidations, leaderboards, builder codes, real-time WebSocket streams (including BBO, L2 and L4 order books), server-side alerts or webhooks, or wants to analyze any address or position on Hyperliquid perps (including HIP-3 markets). Requires a JWT bearer token from the HyperTracker API dashboard.
 ---
 
 """

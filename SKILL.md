@@ -1,6 +1,6 @@
 ---
 name: hypertracker
-description: Query HyperTracker's pre-computed analytics layer for Hyperliquid. Use when the user asks about Hyperliquid wallets, cohort positioning (Money Printer, Smart Money, Whales, etc.), order flow, closed trades, fundings, liquidations, leaderboards, builder codes, real-time WebSocket streams, server-side alerts or webhooks, or wants to analyze any address or position on Hyperliquid perps (including HIP-3 markets). Requires a JWT bearer token from the HyperTracker API dashboard.
+description: Query HyperTracker's pre-computed analytics layer for Hyperliquid. Use when the user asks about Hyperliquid wallets, cohort positioning (Money Printer, Smart Money, Whales, etc.), order flow, closed trades, fundings, liquidations, leaderboards, builder codes, real-time WebSocket streams (including BBO, L2 and L4 order books), server-side alerts or webhooks, or wants to analyze any address or position on Hyperliquid perps (including HIP-3 markets). Requires a JWT bearer token from the HyperTracker API dashboard.
 ---
 
 # HyperTracker API
@@ -261,7 +261,7 @@ Beyond REST, HyperTracker runs production Hyperliquid data infrastructure that b
 
 ### Real-Time WebSocket Streams
 
-Live Hyperliquid fills, account events, TWAP updates and order events over WebSocket or SSE (Centrifugo protocol). The pricing table lists WebSocket streams on the Stream plan.
+Live Hyperliquid order books (BBO, L2, L2 diffs and L4), trades, mids, fills, account events, TWAP updates and order events over WebSocket or SSE (Centrifugo protocol). WebSocket access starts on the Surge plan: Free and Pulse tokens get 403 on connect. See plan access below.
 
 | Purpose | URL |
 |---------|-----|
@@ -274,6 +274,33 @@ Live Hyperliquid fills, account events, TWAP updates and order events over WebSo
 | Account events: deposits, withdrawals, transfers, delegations, vault activity, liquidations, funding | `rooms:misc_events` | `tf` | Yes |
 | TWAP status (`activated` to `finished`/`terminated`) | `rooms:twaps` | `tf` | Yes |
 | Every order event (open, filled, canceled, triggered, ...) | `orders:feed` | `data` (`{"filter": ...}`) | No, live only |
+
+**Order book and market streams.** One channel per coin, named `<namespace>:<COIN>` (e.g. `l2book:BTC`). Subscribe with no filter: `{"id": 2, "subscribe": {"channel": "l2book:BTC"}}`.
+
+| Data | Channel | Plans | Payload (`pub.data`) |
+|------|---------|-------|----------------------|
+| Best bid and offer | `bbo:{COIN}` | Surge, Flow, Stream | `{channel: "bbo", data: {coin, time, bbo: [bid, ask]}}`, each level `{px, sz, n}` (`n` = order count) |
+| L2 book (aggregated levels) | `l2book:{COIN}` | Surge, Flow, Stream | `{channel: "l2Book", data: {coin, time, levels: [bids, asks]}}` |
+| L2 diffs | `l2bookdiff:{COIN}` | Surge, Flow, Stream | `{channel: "l2BookDiff", data: {snapshot, coin, time, height, levels}}`; the first message is a full snapshot (`snapshot: true`), apply later messages as diffs |
+| Trades | `trades:{COIN}` | Surge, Flow, Stream | `{channel: "trades", data: [{coin, side, px, sz, hash, time, tid, users}]}` |
+| Mid price | `mids:{COIN}` | Surge, Flow, Stream | `{channel: "mids", data: {coin, time, mid}}` |
+| L4 book (every individual order, with its wallet) | `l4book:{COIN}` | Stream only | Starts with a `SnapshotPart` sent in pieces (`seq` of `total`, `bids`/`asks` with `user`, `oid`, `limitPx`, `sz`), then live updates |
+
+**Plan access:**
+
+| Stream class | Surge | Flow | Stream | Enterprise |
+|--------------|-------|------|--------|------------|
+| Standard market and address streams | Yes | Yes | Yes | Custom |
+| BBO per market | Yes | Yes | Yes | Custom |
+| L2 diffs per market | Yes | Yes | Yes | Custom |
+| Full L2 snapshots up to standard depth | Up to 5 books | Up to 25 books | Up to 100 books | Custom |
+| High-depth L2 snapshots | No | Limited | Yes | Custom |
+| L4 individual-order data | No | No by default | Limited | Custom |
+| Light market-wide feeds | No | No by default | Individually entitled | Custom |
+| All-market L2 or L4 firehoses | No | No | No by default | Custom |
+| Dedicated infrastructure or SLA | No | No | No by default | Yes |
+
+Free and Pulse cannot open a WebSocket connection. For market-wide feeds, firehoses or dedicated capacity, contact the team (see Enterprise below).
 
 **Protocol (plain WebSocket):**
 1. Connect with the header `Authorization: Bearer <token>` (browsers: send `{"id":1,"connect":{"data":{"token":"<token>"}}}` instead). Never send the token on subscribe.
@@ -620,9 +647,9 @@ Paginated endpoints return a named array plus `nextCursor`. The array key varies
 |------|-------|--------------|------------|-------------------|
 | Free | $0 | 100/day | n/a | REST, server-side alerts |
 | Pulse | $179/mo | 50,000/mo | 60 req/min | REST, server-side alerts |
-| Surge | $399/mo | 150,000/mo | 100 req/min | REST, server-side alerts |
-| Flow | $799/mo | 400,000/mo | 200 req/min | REST, server-side alerts |
-| Stream | $1,999/mo | 2,000,000/mo | 500 req/min | REST, server-side alerts, WebSocket streams |
+| Surge | $399/mo | 150,000/mo | 100 req/min | REST, server-side alerts, WebSocket streams (up to 5 L2 books) |
+| Flow | $799/mo | 400,000/mo | 200 req/min | REST, server-side alerts, WebSocket streams (up to 25 L2 books) |
+| Stream | $1,999/mo | 2,000,000/mo | 500 req/min | REST, server-side alerts, WebSocket streams (up to 100 L2 books, L4) |
 | Enterprise | Custom | Custom | Custom | Dedicated infrastructure, multi-region, white-label |
 
 Usage is metered in tokens shared across the whole API. Server-side alerts use one token per management request and per successful delivery. The per-minute rate limit counts requests. Webhook availability by plan is shown on the pricing page: https://app.coinmarketman.com/hypertracker/api
@@ -1118,6 +1145,7 @@ Register a state webhook in the API dashboard. On each `stateUpdated` ping, re-f
 | Data looks stale | Most data updates on Hyperliquid state updates (about every 30 minutes). Read `createdAt` and check `/hypertracker/state/status`. |
 | Cohort totals look doubled | You summed size and PnL cohorts together. Sum within one axis only. |
 | `POST /info` returns 400 "Invalid Hyperliquid wallet address" | Include `user` in the body for every `type`. |
+| WebSocket connect returns 403, or `l4book:*` is refused | WebSocket access starts on Surge; Free and Pulse cannot connect. `l4book:*` needs Stream. |
 | WebSocket closes with `3008 slow` | Your filter is too broad (always filter `orders:feed`), or your handler is too slow. |
 | WebSocket reconnect lost events (`recovered: false` or `3010`) | Replay covers only seconds to minutes. Backfill the gap from REST. |
 | Alert rule never fires | Check exact ticker case and prefix (`BTC`, `xyz:NVDA`), that numbers are strings, that `addresses` is top-level, and that the endpoint is not paused or suspended. |
