@@ -275,11 +275,11 @@ Live Hyperliquid order books (BBO, L2, L2 diffs and L4), trades, mids, fills, ac
 | Data | Channel | Plans | Payload (`pub.data`) |
 |------|---------|-------|----------------------|
 | Best bid and offer | `bbo:{COIN}` | Surge, Flow, Stream | `{channel: "bbo", data: {coin, time, bbo: [bid, ask]}}`, each level `{px, sz, n}` (`n` = order count) |
-| L2 book (aggregated levels) | `l2book:{COIN}` | Surge, Flow, Stream | `{channel: "l2Book", data: {coin, time, levels: [bids, asks]}}` |
+| L2 book (aggregated levels) | `l2book:{COIN}` | Surge, Flow, Stream | `{channel: "l2Book", data: {coin, time, levels: [bids, asks]}}`, 20 levels per side by default, each level `{px, sz, n}` |
 | L2 diffs | `l2bookdiff:{COIN}` | Surge, Flow, Stream | `{channel: "l2BookDiff", data: {snapshot, coin, time, height, levels}}`; the first message is a full snapshot (`snapshot: true`), apply later messages as diffs |
 | Trades | `trades:{COIN}` | Surge, Flow, Stream | `{channel: "trades", data: [{coin, side, px, sz, hash, time, tid, users}]}` |
 | Mid price | `mids:{COIN}` | Surge, Flow, Stream | `{channel: "mids", data: {coin, time, mid}}` |
-| L4 book (every individual order, with its wallet) | `l4book:{COIN}` | Stream only | Starts with a `SnapshotPart` sent in pieces (`seq` of `total`, `bids`/`asks` with `user`, `oid`, `limitPx`, `sz`), then live updates |
+| L4 book (every individual order, with its wallet) | `l4book:{COIN}` | Stream only | Each `data` holds one key. Starts with either one `Snapshot` (`{coin, time, height, levels: [bids, asks]}`, rows are full orders: `user`, `coin`, `side`, `limitPx`, `sz`, `oid`, `timestamp`, `orderType`, `tif`, `cloid`, `reduceOnly`, ...) or, for large books such as BTC, several back-to-back `SnapshotPart` messages (`{coin, time, height, seq, total, bids, asks}`, `seq` 0-based; append `bids`/`asks` in `seq` order). Then `Updates` messages: `{time, height, order_statuses, book_diffs}`. `book_diffs[].raw_book_diff` is `{new: {sz}}` (optionally with `insertBefore`), `{update: {origSz, newSz}}` or `"remove"`; `order_statuses[].time` is an ISO string with nanoseconds and no `Z`. Handle both snapshot forms. |
 
 **Plan access:**
 
@@ -288,7 +288,7 @@ Live Hyperliquid order books (BBO, L2, L2 diffs and L4), trades, mids, fills, ac
 | Standard market and address streams | Yes | Yes | Yes | Custom |
 | BBO per market | Yes | Yes | Yes | Custom |
 | L2 diffs per market | Yes | Yes | Yes | Custom |
-| Full L2 snapshots up to standard depth | Up to 5 books | Up to 25 books | Up to 100 books | Custom |
+| Order book streams (`bbo`, `l2book`, `l2bookdiff`, `l4book`; 20 levels per side by default) | Up to 5 | Up to 25 | Up to 100 | Custom |
 | High-depth L2 snapshots | No | Limited | Yes | Custom |
 | L4 individual-order data | No | No by default | Limited | Custom |
 | Light market-wide feeds | No | No by default | Individually entitled | Custom |
@@ -312,6 +312,8 @@ Free and Pulse cannot open a WebSocket connection. For market-wide feeds, fireho
 - Replay covers only a few minutes and a few hundred events (fills: often seconds). Save the channel `epoch` and each `offset`, then resubscribe with `"recover": true, "epoch": ..., "offset": ...` after a short drop (`recovered: false` means the gap was not filled; no error is returned). Streams cannot backfill history: use REST (`/fills`, `/fills/liquidation`, `/closed-trades`) for anything older. `3010` means the gap is too large; subscribe fresh.
 - A liquidation produces two tagged fills, one for the liquidated wallet and one for the counterparty. To total liquidations, count only fills where `address == liquidation.liquidatedUser`.
 - Prices and sizes are decimal strings. `blockTime`, `localTime`, `sentTime` and fill `time` are epoch milliseconds; the TWAP stream's `time` is an ISO 8601 string and account-event `time` is an ISO string without a `Z` suffix (treat it as UTC).
+- Order book stream caps are enforced per account: each `bbo`, `l2book`, `l2bookdiff` or `l4book` market counts once per connection (the same market on two connections counts twice). Over the cap the subscribe fails with `1083` (`WS_ORDERBOOK_LIMIT`, temporary); a slot frees about 2.5 minutes after you close a subscription. `mids` and `trades` do not count.
+- Known issue: after you unsubscribe from `l2book`, `l2bookdiff` or `l4book`, the server pushes `{"unsubscribe": {"code": 2500, "reason": "insufficient state"}}`, and `centrifuge-js` treats 2500 as a resubscribe signal, so the stream comes back. Call `client.removeSubscription(sub)` right after `sub.unsubscribe()`, and remove the old subscription before creating one with new parameters. Plain WebSocket clients can ignore the push.
 - SDKs: `centrifuge-js` (JavaScript/TypeScript) and `centrifuge-python` handle pings, reconnects and replay. Some Python SDK versions don't expose `tf`; use a plain WebSocket for `rooms:*` filters.
 
 ### Server-Side Alerts (Events API, Beta)
@@ -642,9 +644,9 @@ Paginated endpoints return a named array plus `nextCursor`. The array key varies
 |------|-------|--------------|------------|-------------------|
 | Free | $0 | 100/day | n/a | REST, server-side alerts |
 | Pulse | $179/mo | 50,000/mo | 60 req/min | REST, server-side alerts |
-| Surge | $399/mo | 150,000/mo | 100 req/min | REST, server-side alerts, WebSocket streams (up to 5 L2 books) |
-| Flow | $799/mo | 400,000/mo | 200 req/min | REST, server-side alerts, WebSocket streams (up to 25 L2 books) |
-| Stream | $1,999/mo | 2,000,000/mo | 500 req/min | REST, server-side alerts, WebSocket streams (up to 100 L2 books, L4) |
+| Surge | $399/mo | 150,000/mo | 100 req/min | REST, server-side alerts, WebSocket streams (up to 5 order book streams) |
+| Flow | $799/mo | 400,000/mo | 200 req/min | REST, server-side alerts, WebSocket streams (up to 25 order book streams) |
+| Stream | $1,999/mo | 2,000,000/mo | 500 req/min | REST, server-side alerts, WebSocket streams (up to 100 order book streams, L4) |
 | Enterprise | Custom | Custom | Custom | Dedicated infrastructure, multi-region, white-label |
 
 Usage is metered in tokens shared across the whole API. Server-side alerts use one token per management request and per successful delivery. The per-minute rate limit counts requests. Webhook availability by plan is shown on the pricing page: https://app.coinmarketman.com/hypertracker/api
@@ -1141,6 +1143,7 @@ Register a state webhook in the API dashboard. On each `stateUpdated` ping, re-f
 | Cohort totals look doubled | You summed size and PnL cohorts together. Sum within one axis only. |
 | `POST /info` returns 400 "Invalid Hyperliquid wallet address" | Include `user` in the body for every `type`. |
 | WebSocket connect returns 403, or `l4book:*` is refused | WebSocket access starts on Surge; Free and Pulse cannot connect. `l4book:*` needs Stream. |
+| An unsubscribed order book channel comes back | Known `2500` push after unsubscribe on `l2book`, `l2bookdiff`, `l4book`. Call `client.removeSubscription(sub)` after `sub.unsubscribe()`. |
 | WebSocket closes with `3008 slow` | Your filter is too broad (always filter `orders:feed`), or your handler is too slow. |
 | WebSocket reconnect lost events (`recovered: false` or `3010`) | Replay covers only seconds to minutes. Backfill the gap from REST. |
 | Alert rule never fires | Check exact ticker case and prefix (`BTC`, `xyz:NVDA`), that numbers are strings, that `addresses` is top-level, and that the endpoint is not paused or suspended. |
